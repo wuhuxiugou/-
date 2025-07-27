@@ -370,7 +370,7 @@
                 </div>
                 <div class="map-display">
                     <div class="loading">地图加载中...</div>
-                    <img src="https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt930eee8c8d0a3ea8/5eaa0675b8a6356e4ddc0cf8/ascent1.jpg" alt="Ascent Map" class="map-image" id="current-map">
+                    <img src="" alt="地图" class="map-image" id="current-map">
                 </div>
             </div>
             
@@ -378,7 +378,7 @@
                 <div class="tool-group">
                     <h2 class="section-title">战术标记工具</h2>
                     <div class="tools">
-                        <div class="tool active" data-tool="attack">
+                        <div class="tool active" data-tool="crosshairs">
                             <i class="fas fa-crosshairs"></i>
                             <span class="tool-label">进攻点</span>
                         </div>
@@ -386,19 +386,19 @@
                             <i class="fas fa-bomb"></i>
                             <span class="tool-label">炸弹点</span>
                         </div>
-                        <div class="tool" data-tool="defense">
+                        <div class="tool" data-tool="shield-alt">
                             <i class="fas fa-shield-alt"></i>
                             <span class="tool-label">防守点</span>
                         </div>
-                        <div class="tool" data-tool="movement">
+                        <div class="tool" data-tool="running">
                             <i class="fas fa-running"></i>
                             <span class="tool-label">移动路线</span>
                         </div>
-                        <div class="tool" data-tool="smoke">
+                        <div class="tool" data-tool="smog">
                             <i class="fas fa-smog"></i>
                             <span class="tool-label">烟雾弹</span>
                         </div>
-                        <div class="tool" data-tool="flash">
+                        <div class="tool" data-tool="bolt">
                             <i class="fas fa-bolt"></i>
                             <span class="tool-label">闪光弹</span>
                         </div>
@@ -456,26 +456,46 @@
     </div>
     
     <script>
-        // 地图切换功能
-        const mapButtons = document.querySelectorAll('.map-btn');
-        const mapName = document.querySelector('.map-name');
-        const mapImage = document.getElementById('current-map');
-        const mapDisplay = document.querySelector('.map-display');
-        const loadingIndicator = document.querySelector('.loading');
-        
-        // 使用稳定的地图图片资源
-        const mapImages = {
-            ascent: 'https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt930eee8c8d0a3ea8/5eaa0675b8a6356e4ddc0cf8/ascent1.jpg',
-            bind: 'https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt3f072336e3f3ade4/5eb270f43b09c042ddca13b7/bind1.jpg',
-            haven: 'https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt77e99ec99ef3d233/5eaa0675b8a6356e4ddc0d01/haven1.jpg',
-            split: 'https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt8a627ec10b57f4f2/5eaa0675b8a6356e4ddc0d0c/split1.jpg',
-            icebox: 'https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/bltdee8a8e4e8a3b6e5/5f80de0845425d6c7f3f42aa/icebox_1.jpg',
-            breeze: 'https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt6577b1f22540d05b/607fa789757d6118347da6fd/breeze_1.jpg',
-            fracture: 'https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt00c0f24c9f0e5b8f/6131d71eca3b8e6714c732d7/fracture_1.jpg',
-            pearl: 'https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt8a9a0c3641e0b9b5/62c483c71b562d7b1d8d1e8e/Pearl_Map_Website_Asset_1920x1080.jpg',
-            sunset: 'https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt2f0b5fa2c9e5a7a0/64e1f0e3d3b9c5646d0c5d0e/Sunset_Map_Website_Asset_1920x1080.jpg'
+        // 使用可靠的图片源（多备份源）
+        const mapImageSources = {
+            ascent: [
+                'https://static.wikia.nocookie.net/valorant/images/a/a7/Ascent_minimap_2.0.jpg',
+                'https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt930eee8c8d0a3ea8/5eaa0675b8a6356e4ddc0cf8/ascent1.jpg'
+            ],
+            bind: [
+                'https://static.wikia.nocookie.net/valorant/images/4/4c/Bind_minimap_2.0.jpg',
+                'https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt3f072336e3f3ade4/5eb270f43b09c042ddca13b7/bind1.jpg'
+            ],
+            haven: [
+                'https://static.wikia.nocookie.net/valorant/images/7/7a/Haven_minimap_2.0.jpg',
+                'https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt77e99ec99ef3d233/5eaa0675b8a6356e4ddc0d01/haven1.jpg'
+            ],
+            split: [
+                'https://static.wikia.nocookie.net/valorant/images/3/34/Split_minimap_2.0.jpg',
+                'https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt8a627ec10b57f4f2/5eaa0675b8a6356e4ddc0d0c/split1.jpg'
+            ],
+            icebox: [
+                'https://static.wikia.nocookie.net/valorant/images/1/13/Icebox_minimap_2.0.jpg',
+                'https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/bltdee8a8e4e8a3b6e5/5f80de0845425d6c7f3f42aa/icebox_1.jpg'
+            ],
+            breeze: [
+                'https://static.wikia.nocookie.net/valorant/images/4/4f/Breeze_minimap_2.0.jpg',
+                'https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt6577b1f22540d05b/607fa789757d6118347da6fd/breeze_1.jpg'
+            ],
+            fracture: [
+                'https://static.wikia.nocookie.net/valorant/images/5/57/Fracture_minimap_2.0.jpg',
+                'https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt00c0f24c9f0e5b8f/6131d71eca3b8e6714c732d7/fracture_1.jpg'
+            ],
+            pearl: [
+                'https://static.wikia.nocookie.net/valorant/images/7/7a/Pearl_minimap_2.0.jpg',
+                'https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt8a9a0c3641e0b9b5/62c483c71b562d7b1d8d1e8e/Pearl_Map_Website_Asset_1920x1080.jpg'
+            ],
+            sunset: [
+                'https://static.wikia.nocookie.net/valorant/images/5/5a/Sunset_minimap_2.0.jpg',
+                'https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt2f0b5fa2c9e5a7a0/64e1f0e3d3b9c5646d0c5d0e/Sunset_Map_Website_Asset_1920x1080.jpg'
+            ]
         };
-        
+
         // 地图名称
         const mapNames = {
             ascent: '亚海悬城',
@@ -488,120 +508,109 @@
             pearl: '深海明珠',
             sunset: '日落之城'
         };
-        
-        // 预加载所有地图图片
-        function preloadMapImages() {
-            Object.values(mapImages).forEach(url => {
-                const img = new Image();
-                img.src = url;
-            });
-        }
-        
+
+        // 初始化
+        const mapButtons = document.querySelectorAll('.map-btn');
+        const mapName = document.querySelector('.map-name');
+        const mapImage = document.getElementById('current-map');
+        const mapDisplay = document.querySelector('.map-display');
+        const loadingIndicator = document.querySelector('.loading');
+        const shareInput = document.getElementById('share-input');
+        const copyButton = document.getElementById('copy-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        const tools = document.querySelectorAll('.tool');
+        const colorOptions = document.querySelectorAll('.color-option');
+
+        // 从URL参数获取初始地图
+        const urlParams = new URLSearchParams(window.location.search);
+        const initialMap = urlParams.get('map') || 'ascent';
+
         // 初始化地图
-        function initMap() {
+        function initMap(mapId = initialMap) {
             // 显示加载指示器
             loadingIndicator.style.display = 'block';
             mapImage.style.opacity = 0;
             
-            // 加载新地图
-            const newImage = new Image();
-            newImage.onload = function() {
+            // 更新活动按钮
+            mapButtons.forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.map === mapId);
+            });
+            
+            // 更新地图名称
+            mapName.textContent = `当前地图：${mapNames[mapId]}`;
+            
+            // 尝试加载地图图片（多源尝试）
+            loadMapImage(mapId);
+            
+            // 更新分享链接
+            updateShareLink(mapId);
+        }
+
+        // 尝试从多个源加载地图图片
+        function loadMapImage(mapId, attempt = 0) {
+            const sources = mapImageSources[mapId];
+            if (attempt >= sources.length) {
+                loadingIndicator.textContent = '地图加载失败，请刷新重试';
+                return;
+            }
+            
+            const img = new Image();
+            img.onload = function() {
                 mapImage.src = this.src;
                 mapImage.style.opacity = 1;
                 loadingIndicator.style.display = 'none';
+                
+                // 如果有标记数据，恢复标记
+                const markersData = urlParams.get('markers');
+                if (markersData) {
+                    restoreMarkers(markersData);
+                }
             };
             
-            newImage.onerror = function() {
-                loadingIndicator.textContent = '地图加载失败，请稍后再试';
-                setTimeout(() => {
-                    loadingIndicator.textContent = '地图加载中...';
-                    newImage.src = mapImages.ascent; // 尝试加载默认地图
-                }, 2000);
+            img.onerror = function() {
+                // 尝试下一个源
+                loadMapImage(mapId, attempt + 1);
             };
             
-            // 获取当前激活的地图按钮
-            const activeMap = document.querySelector('.map-btn.active').dataset.map;
-            newImage.src = mapImages[activeMap];
+            img.src = sources[attempt];
         }
-        
-        // 初始加载
-        window.addEventListener('load', function() {
-            preloadMapImages();
-            initMap();
-            
-            // 添加示例标记
-            setTimeout(() => {
-                createMarker(30, 45, 'attack', '#ff4655');
-                createMarker(55, 60, 'bomb', '#4CAF50');
-                createMarker(70, 30, 'defense', '#2196F3');
-                createMarker(40, 25, 'movement', '#FFC107');
-            }, 1000);
-        });
-        
-        // 地图切换
-        mapButtons.forEach(button => {
-            button.addEventListener('click', () => {
-                // 移除所有按钮的active类
-                mapButtons.forEach(btn => btn.classList.remove('active'));
-                // 为当前按钮添加active类
-                button.classList.add('active');
-                
-                // 获取地图ID
-                const mapId = button.dataset.map;
-                
-                // 更新地图图片
-                initMap();
-                
-                // 更新地图名称
-                mapName.textContent = `当前地图：${mapNames[mapId]}`;
-                
-                // 清除所有标记
-                document.querySelectorAll('.marker').forEach(marker => marker.remove());
+
+        // 更新分享链接
+        function updateShareLink(mapId) {
+            // 获取当前所有标记数据
+            const markers = [];
+            document.querySelectorAll('.marker').forEach(marker => {
+                markers.push({
+                    x: marker.style.left,
+                    y: marker.style.top,
+                    color: marker.style.backgroundColor,
+                    type: marker.querySelector('i').className.replace('fas fa-', '')
+                });
             });
-        });
-        
-        // 工具选择功能
-        const tools = document.querySelectorAll('.tool');
-        tools.forEach(tool => {
-            tool.addEventListener('click', () => {
-                tools.forEach(t => t.classList.remove('active'));
-                tool.classList.add('active');
-            });
-        });
-        
-        // 颜色选择功能
-        const colorOptions = document.querySelectorAll('.color-option');
-        colorOptions.forEach(option => {
-            option.addEventListener('click', () => {
-                colorOptions.forEach(opt => opt.classList.remove('active'));
-                option.classList.add('active');
-            });
-        });
-        
-        // 地图点击添加标记功能
-        mapDisplay.addEventListener('click', (e) => {
-            // 确保点击的是地图而不是标记
-            if (e.target !== mapDisplay && e.target !== mapImage) return;
             
-            // 获取点击位置相对于地图容器的坐标
-            const rect = mapDisplay.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            
-            // 转换为百分比
-            const percentX = (x / rect.width) * 100;
-            const percentY = (y / rect.height) * 100;
-            
-            // 获取当前选中的工具
-            const selectedTool = document.querySelector('.tool.active').dataset.tool;
-            
-            // 获取当前选中的颜色
-            const selectedColor = document.querySelector('.color-option.active').style.backgroundColor;
-            
-            // 创建标记
-            createMarker(percentX, percentY, selectedTool, selectedColor);
-        });
-        
+            // 生成分享链接
+            const baseUrl = window.location.href.split('?')[0];
+            const shareUrl = `${baseUrl}?map=${mapId}&markers=${encodeURIComponent(JSON.stringify(markers))}`;
+            shareInput.value = shareUrl;
+        }
+
+        // 恢复标记
+        function restoreMarkers(markersData) {
+            try {
+                const markers = JSON.parse(decodeURIComponent(markersData));
+                markers.forEach(marker => {
+                    createMarker(
+                        parseFloat(marker.x),
+                        parseFloat(marker.y),
+                        marker.type,
+                        marker.color
+                    );
+                });
+            } catch (e) {
+                console.error('恢复标记失败:', e);
+            }
+        }
+
         // 创建标记函数
         function createMarker(x, y, type, color) {
             const marker = document.createElement('div');
@@ -612,39 +621,23 @@
             
             // 根据类型添加图标
             const icon = document.createElement('i');
-            
-            switch(type) {
-                case 'attack':
-                    icon.className = 'fas fa-crosshairs';
-                    break;
-                case 'bomb':
-                    icon.className = 'fas fa-bomb';
-                    break;
-                case 'defense':
-                    icon.className = 'fas fa-shield-alt';
-                    break;
-                case 'movement':
-                    icon.className = 'fas fa-running';
-                    break;
-                case 'smoke':
-                    icon.className = 'fas fa-smog';
-                    break;
-                case 'flash':
-                    icon.className = 'fas fa-bolt';
-                    break;
-                default:
-                    icon.className = 'fas fa-map-marker-alt';
-            }
-            
+            icon.className = `fas fa-${type}`;
             marker.appendChild(icon);
+            
             mapDisplay.appendChild(marker);
             
             // 添加删除功能
             marker.addEventListener('dblclick', () => {
                 marker.remove();
+                updateShareLink(getCurrentMapId());
             });
             
             // 添加拖动功能
+            setupMarkerDrag(marker);
+        }
+
+        // 设置标记拖动
+        function setupMarkerDrag(marker) {
             let isDragging = false;
             let offsetX, offsetY;
             
@@ -666,7 +659,6 @@
                     const percentX = (x / rect.width) * 100;
                     const percentY = (y / rect.height) * 100;
                     
-                    // 确保标记不超出地图边界
                     if (percentX >= 0 && percentX <= 100 && percentY >= 0 && percentY <= 100) {
                         marker.style.left = `${percentX}%`;
                         marker.style.top = `${percentY}%`;
@@ -675,51 +667,93 @@
             });
             
             document.addEventListener('mouseup', () => {
-                isDragging = false;
-                marker.style.zIndex = '10';
+                if (isDragging) {
+                    isDragging = false;
+                    marker.style.zIndex = '10';
+                    updateShareLink(getCurrentMapId());
+                }
             });
         }
-        
-        // 复制分享链接功能
-        const copyButton = document.getElementById('copy-btn');
-        const shareInput = document.getElementById('share-input');
-        
-        copyButton.addEventListener('click', () => {
-            shareInput.select();
-            document.execCommand('copy');
-            
-            // 显示复制成功提示
-            const originalText = copyButton.textContent;
-            copyButton.textContent = '已复制!';
-            setTimeout(() => {
-                copyButton.textContent = originalText;
-            }, 2000);
-        });
-        
-        // 清除所有标记功能
-        const clearBtn = document.getElementById('clear-btn');
-        clearBtn.addEventListener('click', () => {
-            const markers = document.querySelectorAll('.marker');
-            markers.forEach(marker => marker.remove());
-        });
-        
-        // 生成分享链接
-        function generateShareLink() {
-            const activeMap = document.querySelector('.map-btn.active').dataset.map;
-            return `https://your-github-username.github.io/valorant-tactics?map=${activeMap}`;
+
+        // 获取当前地图ID
+        function getCurrentMapId() {
+            return document.querySelector('.map-btn.active').dataset.map;
         }
-        
-        // 更新分享链接
-        shareInput.value = generateShareLink();
-        
-        // 保存战术功能
-        document.getElementById('save-btn').addEventListener('click', () => {
-            alert('战术已保存！队友可以通过分享链接查看您的部署');
-        });
-        
-        // 导出为图片功能
-        document.getElementById('export-btn').addEventListener('click', () => {
-            alert('功能提示：在真实部署中，这里会将地图和标记导出为PNG图片');
+
+        // 初始化页面
+        window.addEventListener('load', function() {
+            // 设置地图按钮事件
+            mapButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    const mapId = button.dataset.map;
+                    initMap(mapId);
+                });
+            });
+            
+            // 设置工具选择事件
+            tools.forEach(tool => {
+                tool.addEventListener('click', () => {
+                    tools.forEach(t => t.classList.remove('active'));
+                    tool.classList.add('active');
+                });
+            });
+            
+            // 设置颜色选择事件
+            colorOptions.forEach(option => {
+                option.addEventListener('click', () => {
+                    colorOptions.forEach(opt => opt.classList.remove('active'));
+                    option.classList.add('active');
+                });
+            });
+            
+            // 设置地图点击事件
+            mapDisplay.addEventListener('click', (e) => {
+                if (e.target !== mapDisplay && e.target !== mapImage) return;
+                
+                const rect = mapDisplay.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                const percentX = (x / rect.width) * 100;
+                const percentY = (y / rect.height) * 100;
+                
+                const selectedTool = document.querySelector('.tool.active').dataset.tool;
+                const selectedColor = document.querySelector('.color-option.active').style.backgroundColor;
+                
+                createMarker(percentX, percentY, selectedTool, selectedColor);
+                updateShareLink(getCurrentMapId());
+            });
+            
+            // 复制分享链接功能
+            copyButton.addEventListener('click', () => {
+                shareInput.select();
+                document.execCommand('copy');
+                
+                const originalText = copyButton.textContent;
+                copyButton.textContent = '已复制!';
+                setTimeout(() => {
+                    copyButton.textContent = originalText;
+                }, 2000);
+            });
+            
+            // 清除所有标记
+            clearBtn.addEventListener('click', () => {
+                document.querySelectorAll('.marker').forEach(marker => marker.remove());
+                updateShareLink(getCurrentMapId());
+            });
+            
+            // 保存战术功能
+            document.getElementById('save-btn').addEventListener('click', () => {
+                alert('战术已保存！队友可以通过分享链接查看您的部署');
+            });
+            
+            // 导出为图片功能
+            document.getElementById('export-btn').addEventListener('click', () => {
+                alert('功能提示：在真实部署中，这里会将地图和标记导出为PNG图片');
+            });
+            
+            // 初始化第一个地图
+            initMap();
         });
     </script>
 </body>
