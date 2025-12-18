@@ -1,0 +1,3197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>模切机生产记录系统</title>
+    <!-- Tailwind CSS v3 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <!-- 统一的 Tailwind 配置 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#1e40af', // 工业蓝
+                        secondary: '#f97316', // 橙色强调色
+                        neutral: '#f8fafc', // 白色背景
+                        dark: '#0f172a', // 深色文本
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.5s ease-in-out',
+                        'slide-in': 'slideIn 0.3s ease-in-out',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' },
+                        },
+                        slideIn: {
+                            '0%': { transform: 'translateY(10px)', opacity: '0' },
+                            '100%': { transform: 'translateY(0)', opacity: '1' },
+                        },
+                    },
+                }
+            }
+        }
+    </script>
+    
+    <script>
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            // 初始化数据
+            initializeData();
+            
+            // 渲染初始界面
+            renderTodayRecords();
+            renderHistoryRecords();
+            updateDashboard();
+            
+            // 设置当前日期时间
+            if (typeof setCurrentDateTimeInputs === 'function') {
+                setCurrentDateTimeInputs();
+            }
+            
+            console.log('模切机生产记录系统初始化完成');
+        });
+        
+        // 渲染今日记录
+        function renderTodayRecords() {
+            console.log('开始渲染今日记录...');
+            const todayRecordsContainer = document.getElementById('today-records');
+            if (!todayRecordsContainer) {
+                console.error('today-records容器未找到');
+                return;
+            }
+            
+            const today = new Date().toISOString().split('T')[0];
+            const todayRecords = productionRecords.filter(record => record.date === today);
+            
+            if (todayRecords.length === 0) {
+                todayRecordsContainer.innerHTML = `
+                    <div class="text-center text-gray-500 py-8">
+                        <i class="fa fa-clipboard text-4xl mb-2"></i>
+                        <p>今日暂无生产记录</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            const recordsHtml = todayRecords.map(record => `
+                <div class="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                            <h4 class="font-semibold text-gray-900">${record.productName}</h4>
+                            <p class="text-sm text-gray-600">${record.machineType === 'circle' ? '圆模切机' : '平压模切机'}</p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button class="text-blue-600 hover:text-blue-800 text-sm" onclick="editRecord('${record.id}')">
+                                <i class="fa fa-edit"></i> 编辑
+                            </button>
+                            <button class="text-red-600 hover:text-red-800 text-sm delete-record-btn" data-record-id="${record.id}">
+                                <i class="fa fa-trash"></i> 删除
+                            </button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-sm">
+                        <div>
+                            <span class="text-gray-500">开机时间:</span>
+                            <span>${formatDateTime(record.startTime)}</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-500">结束时间:</span>
+                            <span>${formatDateTime(record.endTime)}</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-500">调机时间:</span>
+                            <span>${record.setupTime}分钟</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-500">模切刀数:</span>
+                            <span class="font-semibold">${record.cuts}</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-500">完成数量:</span>
+                            <span>${record.cuts * record.completedPerCut}</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-500">工作时长:</span>
+                            <span>${record.workDuration.toFixed(1)}小时</span>
+                        </div>
+                    </div>
+                    ${record.remarks ? `<div class="mt-2 text-sm text-gray-600">备注: ${record.remarks}</div>` : ''}
+                </div>
+            `).join('');
+            
+            todayRecordsContainer.innerHTML = recordsHtml;
+        }
+        
+        // 渲染历史记录
+        function renderHistoryRecords() {
+            console.log('开始渲染历史记录...');
+            const historyRecordsContainer = document.getElementById('history-records');
+            if (!historyRecordsContainer) {
+                console.error('history-records容器未找到');
+                return;
+            }
+            
+            if (productionRecords.length === 0) {
+                historyRecordsContainer.innerHTML = `
+                    <div class="text-center text-gray-500 py-8">
+                        <i class="fa fa-history text-4xl mb-2"></i>
+                        <p>暂无历史记录</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // 按日期分组
+            const recordsByDate = {};
+            productionRecords.forEach(record => {
+                if (!recordsByDate[record.date]) {
+                    recordsByDate[record.date] = [];
+                }
+                recordsByDate[record.date].push(record);
+            });
+            
+            const sortedDates = Object.keys(recordsByDate).sort((a, b) => new Date(b) - new Date(a));
+            
+            const historyHtml = sortedDates.map(date => {
+                const dateRecords = recordsByDate[date];
+                const totalCuts = dateRecords.reduce((sum, record) => sum + record.cuts, 0);
+                const totalOvertime = dateRecords.reduce((sum, record) => sum + (record.overtime || 0), 0);
+                
+                return `
+                    <div class="border rounded-lg overflow-hidden">
+                        <div class="bg-gray-50 px-4 py-3 flex justify-between items-center">
+                            <div>
+                                <h4 class="font-semibold text-gray-900">${formatDate(date)}</h4>
+                                <p class="text-sm text-gray-600">${dateRecords.length}条记录 · ${totalCuts}刀 · 加班${totalOvertime.toFixed(1)}小时</p>
+                            </div>
+                            <button class="btn-outline text-sm py-1 px-2 delete-day-btn" data-date="${date}">
+                                <i class="fa fa-trash mr-1"></i> 删除当日
+                            </button>
+                        </div>
+                        <div class="divide-y">
+                            ${dateRecords.map(record => `
+                                <div class="px-4 py-3 hover:bg-gray-50">
+                                    <div class="flex justify-between items-start">
+                                        <div>
+                                            <h5 class="font-medium text-gray-900">${record.productName}</h5>
+                                            <p class="text-sm text-gray-600">${record.machineType === 'circle' ? '圆模切机' : '平压模切机'}</p>
+                                        </div>
+                                        <div class="flex space-x-2 text-sm">
+                                            <button class="text-blue-600 hover:text-blue-800" onclick="editRecord('${record.id}')">
+                                                <i class="fa fa-edit"></i> 编辑
+                                            </button>
+                                            <button class="text-red-600 hover:text-red-800 delete-record-btn" data-record-id="${record.id}">
+                                                <i class="fa fa-trash"></i> 删除
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm mt-2">
+                                        <div><span class="text-gray-500">时间:</span> ${formatTime(record.startTime)} - ${formatTime(record.endTime)}</div>
+                                        <div><span class="text-gray-500">调机:</span> ${record.setupTime}分钟</div>
+                                        <div><span class="text-gray-500">刀数:</span> ${record.cuts}</div>
+                                        <div><span class="text-gray-500">完成:</span> ${record.cuts * record.completedPerCut}</div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            historyRecordsContainer.innerHTML = historyHtml;
+        }
+        
+        // 更新仪表盘
+        function updateDashboard() {
+            console.log('开始更新仪表盘...');
+            const today = new Date().toISOString().split('T')[0];
+            const todayRecords = productionRecords.filter(record => record.date === today);
+            
+            const circleRecords = todayRecords.filter(record => record.machineType === 'circle');
+            const flatRecords = todayRecords.filter(record => record.machineType === 'flat');
+            
+            const circleTotalCuts = circleRecords.reduce((sum, record) => sum + record.cuts, 0);
+            const flatTotalCuts = flatRecords.reduce((sum, record) => sum + record.cuts, 0);
+            const totalOvertime = todayRecords.reduce((sum, record) => sum + (record.overtime || 0), 0);
+            
+            // 更新圆模切机数据
+            const circleCountEl = document.getElementById('circle-machine-count');
+            const circleCountMobileEl = document.getElementById('circle-machine-count-mobile');
+            const circleProgressEl = document.getElementById('circle-machine-progress');
+            
+            if (circleCountEl) circleCountEl.textContent = circleTotalCuts;
+            if (circleCountMobileEl) circleCountMobileEl.textContent = circleTotalCuts;
+            if (circleProgressEl) {
+                const circleTarget = settings?.circleDailyTarget || 50000;
+                const progress = Math.min(100, (circleTotalCuts / circleTarget) * 100);
+                circleProgressEl.style.width = `${progress}%`;
+            }
+            
+            // 更新平压模切机数据
+            const flatCountEl = document.getElementById('flat-machine-count');
+            const flatCountMobileEl = document.getElementById('flat-machine-count-mobile');
+            const flatProgressEl = document.getElementById('flat-machine-progress');
+            
+            if (flatCountEl) flatCountEl.textContent = flatTotalCuts;
+            if (flatCountMobileEl) flatCountMobileEl.textContent = flatTotalCuts;
+            if (flatProgressEl) {
+                const flatTarget = settings?.flatDailyTarget || 110000;
+                const progress = Math.min(100, (flatTotalCuts / flatTarget) * 100);
+                flatProgressEl.style.width = `${progress}%`;
+            }
+            
+            // 更新加班时间
+            const overtimeEl = document.getElementById('overtime-hours');
+            const overtimeMobileEl = document.getElementById('overtime-hours-mobile');
+            if (overtimeEl) overtimeEl.textContent = `${totalOvertime.toFixed(1)}h`;
+            if (overtimeMobileEl) overtimeMobileEl.textContent = `${totalOvertime.toFixed(1)}h`;
+            
+            // 更新总刀数
+            const totalCutsMobileEl = document.getElementById('total-cuts-mobile');
+            if (totalCutsMobileEl) totalCutsMobileEl.textContent = circleTotalCuts + flatTotalCuts;
+        }
+        
+        // 辅助函数：格式化日期时间
+        function formatDateTime(dateTimeStr) {
+            const date = new Date(dateTimeStr);
+            return date.toLocaleString('zh-CN', {
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+        
+        // 辅助函数：格式化日期
+        function formatDate(dateStr) {
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                weekday: 'long'
+            });
+        }
+        
+        // 辅助函数：格式化时间
+        function formatTime(dateTimeStr) {
+            const date = new Date(dateTimeStr);
+            return date.toLocaleTimeString('zh-CN', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .glass-effect {
+                @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-lg;
+            }
+            .card-hover {
+                @apply transition-all duration-300 hover:shadow-xl hover:-translate-y-1;
+            }
+            .btn-primary {
+                @apply bg-primary hover:bg-primary/90 text-white font-medium py-2 px-4 rounded-lg transition-all duration-300 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-primary/50;
+            }
+            .btn-secondary {
+                @apply bg-secondary hover:bg-secondary/90 text-white font-medium py-2 px-4 rounded-lg transition-all duration-300 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-secondary/50;
+            }
+            .btn-outline {
+                @apply border border-primary text-primary hover:bg-primary hover:text-white font-medium py-2 px-4 rounded-lg transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary/50;
+            }
+            .input-field {
+                @apply w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-300;
+            }
+            .label {
+                @apply block text-sm font-medium text-gray-700 mb-1;
+            }
+            .badge {
+                @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+            }
+            .badge-success {
+                @apply bg-green-100 text-green-800;
+            }
+            .badge-warning {
+                @apply bg-yellow-100 text-yellow-800;
+            }
+            .badge-danger {
+                @apply bg-red-100 text-red-800;
+            }
+            .badge-info {
+                @apply bg-blue-100 text-blue-800;
+            }
+            .nav-link {
+                @apply flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-300;
+            }
+            .nav-link.active {
+                @apply bg-primary text-white;
+            }
+            .nav-link:not(.active) {
+                @apply text-gray-600 hover:bg-gray-100;
+            }
+            .tab-content {
+                @apply hidden;
+            }
+            .tab-content.active {
+                @apply block animate-fade-in;
+            }
+            .collapsible-header {
+                @apply flex justify-between items-center w-full py-3 px-4 bg-gray-50 hover:bg-gray-100 transition-colors duration-300 cursor-pointer;
+            }
+            .collapsible-content {
+                @apply overflow-hidden transition-all duration-300 max-h-0;
+            }
+            .collapsible-content.open {
+                @apply max-h-[1000px] py-3 px-4 border-t border-gray-200;
+            }
+            .table-header {
+                @apply px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider;
+            }
+            .table-cell {
+                @apply px-6 py-4 whitespace-nowrap text-sm text-gray-900;
+            }
+            .progress-bar {
+                @apply h-2 rounded-full bg-gray-200 overflow-hidden;
+            }
+            .progress-value {
+                @apply h-full rounded-full transition-all duration-500 ease-out;
+            }
+            .progress-success {
+                @apply bg-green-500;
+            }
+            .progress-warning {
+                @apply bg-yellow-500;
+            }
+            .progress-danger {
+                @apply bg-red-500;
+            }
+        }
+    </style>
+</head>    <div class="min-h-screen flex flex-col">
+        <!-- 顶部导航栏 -->
+        <header class="bg-white shadow-sm border-b border-gray-200">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center h-16">
+                    <div class="flex items-center">
+                        <i class="fa fa-cogs text-primary text-2xl mr-3"></i>
+                        <h1 class="text-xl font-bold text-gray-900">模切机生产记录系统</h1>
+                    </div>
+
+
+                    <div class="flex items-center space-x-4">
+                        <div class="text-sm text-gray-600">
+                            <span id="current-date-time" class="font-medium"></span>
+                        </div>
+
+
+                        <button id="settings-btn" class="p-2 rounded-full hover:bg-gray-100 transition-colors duration-300">
+                            <i class="fa fa-cog text-gray-600"></i>
+                        </button>
+                    </div>
+
+
+                </div>
+
+
+            </div>
+
+
+        </header>
+
+        <!-- 主要内容区域 -->
+        <main class="flex-grow flex flex-col md:flex-row">
+            <!-- 左侧导航栏 -->
+            <nav class="w-full md:w-64 bg-white shadow-sm border-b md:border-b-0 md:border-r border-gray-200 p-4 md:min-h-screen">
+                <ul class="flex md:flex-col space-x-2 md:space-x-0 md:space-y-2">
+                    <li>
+                        <a href="#" class="nav-link active" data-tab="record">
+                            <i class="fa fa-plus-circle w-5 text-center"></i>
+                            <span class="hidden sm:inline">生产记录</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="nav-link" data-tab="history">
+                            <i class="fa fa-history w-5 text-center"></i>
+                            <span class="hidden sm:inline">历史记录</span>
+                        </a>
+                    </li>
+
+                </ul>
+                
+
+                
+                <div class="hidden md:block mt-8 pt-4 border-t border-gray-200">
+                    <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-4">今日概览</h3>
+                    <div class="space-y-3 px-2">
+                        <div class="bg-gray-50 rounded-lg p-3">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="text-sm font-medium text-gray-700">圆模切机</span>
+                                <span class="text-sm font-medium text-primary" id="circle-machine-count">0</span>
+                            </div>
+
+
+                            <div class="progress-bar">
+                                <div class="progress-value progress-success" id="circle-machine-progress" style="width: 0%"></div>
+                            </div>
+
+
+                        </div>
+
+
+                        <div class="bg-gray-50 rounded-lg p-3">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="text-sm font-medium text-gray-700">平压模切机</span>
+                                <span class="text-sm font-medium text-primary" id="flat-machine-count">0</span>
+                            </div>
+
+
+                            <div class="progress-bar">
+                                <div class="progress-value progress-success" id="flat-machine-progress" style="width: 0%"></div>
+                            </div>
+
+
+                        </div>
+
+
+
+                        <div class="bg-gray-50 rounded-lg p-3">
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm font-medium text-gray-700">加班时长</span>
+                                <span class="text-sm font-medium text-secondary" id="overtime-hours">0h</span>
+                            </div>
+
+
+                        </div>
+
+
+                    </div>
+
+
+                </div>
+
+
+                
+                <!-- 移动端概览卡片 -->
+                <div class="md:hidden mt-4 pt-2">
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="bg-gray-50 rounded-lg p-2">
+                            <p class="text-xs text-gray-500">圆模切机</p>
+                            <p class="text-sm font-medium text-primary" id="circle-machine-count-mobile">0</p>
+                        </div>
+
+
+                        <div class="bg-gray-50 rounded-lg p-2">
+                            <p class="text-xs text-gray-500">平压模切机</p>
+                            <p class="text-sm font-medium text-primary" id="flat-machine-count-mobile">0</p>
+                        </div>
+
+
+                        <div class="bg-gray-50 rounded-lg p-2">
+                            <p class="text-xs text-gray-500">总生产刀数</p>
+                            <p class="text-sm font-medium text-primary" id="total-cuts-mobile">0</p>
+                        </div>
+
+
+                        <div class="bg-gray-50 rounded-lg p-2">
+                            <p class="text-xs text-gray-500">加班时长</p>
+                            <p class="text-sm font-medium text-secondary" id="overtime-hours-mobile">0h</p>
+                        </div>
+
+
+                    </div>
+
+
+                </div>
+
+
+            </nav>
+
+            <!-- 右侧内容区域 -->
+            <div class="flex-grow p-6 overflow-auto">
+                <!-- 生产记录页面 -->
+                <div id="record-tab" class="tab-content active">
+                    <div class="max-w-4xl mx-auto">
+                        <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+                            <h2 class="text-lg font-semibold text-gray-900 mb-4">新增生产记录</h2>
+                            <form id="production-form" class="space-y-4">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label for="machine-type" class="label">机器类型</label>
+                                        <select id="machine-type" name="machineType" class="input-field" required>
+                                            <option value="">请选择机器类型</option>
+                                            <option value="circle">圆模切机</option>
+                                            <option value="flat">平压模切机</option>
+                                        </select>
+                                    </div>
+
+
+                                    <div>
+                                        <label for="product-name" class="label">产品名称</label>
+                                        <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+                                            <input type="text" id="product-name" name="productName" class="input-field flex-grow" placeholder="请输入产品名称" required>
+                                            <div class="flex space-x-2">
+                                                <button type="button" id="confirm-product" class="btn-primary whitespace-nowrap flex-1">确认</button>
+                                                <button type="button" id="cancel-confirm" class="btn-outline whitespace-nowrap flex-1" disabled>取消</button>
+                                            </div>
+
+
+                                        </div>
+
+
+                                    </div>
+
+
+                                </div>
+
+
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label for="start-time" class="label">开机时间</label>
+                                        <input type="datetime-local" id="start-time" name="startTime" class="input-field" required>
+                                    </div>
+
+
+                                    <div>
+                                        <label for="setup-time" class="label">调机时间 (分钟)</label>
+                                        <input type="number" id="setup-time" name="setupTime" class="input-field" min="0" placeholder="请输入调机时间" required>
+                                    </div>
+
+
+                                </div>
+
+
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label for="cuts" class="label">模切刀数</label>
+                                        <input type="number" id="cuts" name="cuts" class="input-field" min="0" placeholder="请输入模切刀数" required>
+                                    </div>
+
+
+                                    <div>
+                                        <label for="completedPerCut" class="label">每刀完成数</label>
+                                        <input type="number" id="completedPerCut" name="completedPerCut" class="input-field" min="1" value="1" placeholder="请输入每刀完成数量" required>
+                                    </div>
+
+
+                                </div>
+
+
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label for="end-time" class="label">结束时间</label>
+                                        <input type="datetime-local" id="end-time" name="endTime" class="input-field" required>
+                                    </div>
+
+
+                                    <div>
+                                        <label for="remarks" class="label">备注</label>
+                                        <input type="text" id="remarks" name="remarks" class="input-field" placeholder="请输入备注信息">
+                                    </div>
+
+
+                                </div>
+
+
+                                
+                                <div class="flex justify-end space-x-3 pt-2">
+                                    <button type="button" id="reset-form" class="btn-outline">重置</button>
+                                    <button type="submit" class="btn-primary">保存记录</button>
+                                </div>
+
+
+                            </form>
+                        </div>
+
+
+                        
+                        <div class="bg-white rounded-lg shadow-sm p-6">
+                            <h2 class="text-lg font-semibold text-gray-900 mb-4">今日记录</h2>
+                            <div id="today-records" class="space-y-3">
+                                <!-- 今日记录将通过JavaScript动态生成 -->
+                                <div class="text-center text-gray-500 py-8">
+                                    <i class="fa fa-clipboard text-4xl mb-2"></i>
+                                    <p>今日暂无生产记录</p>
+                                </div>
+
+
+                            </div>
+
+
+                        </div>
+
+
+                    </div>
+
+
+                </div>
+
+
+
+                <!-- 历史记录页面 -->
+                <div id="history-tab" class="tab-content">
+                    <div class="max-w-6xl mx-auto">
+                        <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <h2 class="text-lg font-semibold text-gray-900">历史生产记录</h2>
+                                <div class="flex items-center space-x-2">
+                                    <select id="history-machine-filter" class="input-field py-1 px-2 text-sm">
+                                        <option value="all">全部机器</option>
+                                        <option value="circle">圆模切机</option>
+                                        <option value="flat">平压模切机</option>
+                                    </select>
+                                    <input type="month" id="history-month-filter" class="input-field py-1 px-2 text-sm">
+                                    <div class="border-l border-gray-300 h-6 mx-2"></div>
+                                    <button id="delete-all-btn" class="btn-outline text-red-600 border-red-600 hover:bg-red-600 hover:text-white text-sm py-1 px-3">
+                                        <i class="fa fa-trash mr-1"></i> 全部
+                                    </button>
+                                    <button id="delete-month-btn" class="btn-outline text-yellow-600 border-yellow-600 hover:bg-yellow-600 hover:text-white text-sm py-1 px-3">
+                                        <i class="fa fa-calendar-minus-o mr-1"></i> 本月
+                                    </button>
+                                    <div class="border-l border-gray-300 h-6 mx-2"></div>
+                                    <button id="export-records-btn" class="btn-outline text-blue-600 border-blue-600 hover:bg-blue-600 hover:text-white text-sm py-1 px-3">
+                                        <i class="fa fa-download mr-1"></i> 导出
+                                    </button>
+                                    <button id="import-records-btn" class="btn-outline text-green-600 border-green-600 hover:bg-green-600 hover:text-white text-sm py-1 px-3">
+                                        <i class="fa fa-upload mr-1"></i> 导入
+                                    </button>
+                                    <input type="file" id="import-file-input" accept=".json" class="hidden">
+                                </div>
+
+
+                            </div>
+
+
+                            
+                            <div id="history-records" class="space-y-4">
+                                <!-- 历史记录将通过JavaScript动态生成 -->
+                                <div class="text-center text-gray-500 py-8">
+                                    <i class="fa fa-history text-4xl mb-2"></i>
+                                    <p>暂无历史记录</p>
+                                </div>
+
+
+                            </div>
+
+
+                        </div>
+
+
+                    </div>
+
+
+                </div>
+
+
+
+
+            </div>
+
+
+        </main>
+    </div>
+
+
+
+    <!-- 设置弹窗 -->
+    <div id="settings-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 animate-slide-in">
+            <div class="flex justify-between items-center border-b border-gray-200 px-6 py-4">
+                <h3 class="text-lg font-semibold text-gray-900">系统设置</h3>
+                <button id="close-settings" class="text-gray-400 hover:text-gray-500">
+                    <i class="fa fa-times"></i>
+                </button>
+            </div>
+
+
+            <div class="px-6 py-4">
+                <form id="settings-form" class="space-y-4">
+                    <div>
+                        <label for="circle-daily-target" class="label">圆模切机每日目标刀数</label>
+                        <input type="number" id="circle-daily-target" name="circleDailyTarget" class="input-field" value="50000" min="0" required>
+                    </div>
+
+
+                    <div>
+                        <label for="flat-daily-target" class="label">平压模切机每日目标刀数</label>
+                        <input type="number" id="flat-daily-target" name="flatDailyTarget" class="input-field" value="110000" min="0" required>
+                    </div>
+
+
+                    <div>
+                        <label for="work-hours" class="label">每日工作时间 (小时)</label>
+                        <input type="number" id="work-hours" name="workHours" class="input-field" value="8" min="0" step="0.5" required>
+                    </div>
+
+
+                    <div>
+                        <label for="lunch-break" class="label">午休时间 (分钟)</label>
+                        <input type="number" id="lunch-break" name="lunchBreak" class="input-field" value="30" min="0" required>
+                    </div>
+
+
+                    <div>
+                        <label for="circle-hourly-rate" class="label">圆模切机每小时产能</label>
+                        <input type="number" id="circle-hourly-rate" name="circleHourlyRate" class="input-field" value="6250" min="0" required>
+                    </div>
+
+
+                    <div>
+                        <label for="flat-hourly-rate" class="label">平压模切机每小时产能</label>
+                        <input type="number" id="flat-hourly-rate" name="flatHourlyRate" class="input-field" value="13750" min="0" required>
+                    </div>
+
+
+                    <div>
+                        <label for="circle-setup-penalty" class="label">圆模切机调机时间惩罚系数 (小时/次)</label>
+                        <input type="number" id="circle-setup-penalty" name="circleSetupPenalty" class="input-field" value="0.25" min="0" step="0.1" required>
+                    </div>
+
+
+                    <div>
+                        <label for="flat-setup-penalty" class="label">平压模切机调机时间惩罚系数 (小时/次)</label>
+                        <input type="number" id="flat-setup-penalty" name="flatSetupPenalty" class="input-field" value="0.5" min="0" step="0.1" required>
+                    </div>
+
+
+                </form>
+            </div>
+
+
+            <div class="bg-gray-50 px-6 py-4 flex justify-end rounded-b-lg">
+                <button id="reset-settings" class="btn-outline mr-2">恢复默认</button>
+                <button id="save-settings" class="btn-primary">保存设置</button>
+            </div>
+
+
+        </div>
+
+
+    </div>
+
+
+
+    <!-- 确认删除弹窗 -->
+    <div id="delete-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg shadow-xl max-w-sm w-full mx-4 animate-slide-in">
+            <div class="px-6 py-4">
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">确认删除</h3>
+                <p class="text-gray-600">您确定要删除这条生产记录吗？此操作无法撤销。</p>
+            </div>
+
+
+            <div class="bg-gray-50 px-6 py-4 flex justify-end rounded-b-lg">
+                <button id="cancel-delete" class="btn-outline mr-2">取消</button>
+                <button id="confirm-delete" class="btn-secondary">删除</button>
+            </div>
+
+
+        </div>
+
+
+    </div>
+
+
+
+    <!-- 通知提示 -->
+    <div id="notification" class="fixed bottom-4 right-4 max-w-sm bg-white rounded-lg shadow-lg border-l-4 border-primary p-4 transform translate-x-full transition-transform duration-300 z-50">
+        <div class="flex items-start">
+            <div class="flex-shrink-0">
+                <i id="notification-icon" class="fa fa-check-circle text-green-500 text-xl"></i>
+            </div>
+
+
+            <div class="ml-3 w-0 flex-1">
+                <p id="notification-title" class="text-sm font-medium text-gray-900"></p>
+                <p id="notification-message" class="mt-1 text-sm text-gray-500"></p>
+            </div>
+
+
+            <div class="ml-4 flex-shrink-0 flex">
+                <button id="close-notification" class="inline-flex text-gray-400 hover:text-gray-500">
+                    <i class="fa fa-times"></i>
+                </button>
+            </div>
+
+
+        </div>
+
+
+    </div>
+
+
+
+    <script>
+        // 全局变量
+        let productionRecords = []; // 初始为空数组，确保首次加载时没有记录
+        let settings = {
+            circleDailyTarget: 50000,
+            flatDailyTarget: 110000,
+            workHours: 8,
+            lunchBreak: 30,
+            circleHourlyRate: 6250,
+            flatHourlyRate: 13750,
+            circleSetupPenalty: 0.25,
+            flatSetupPenalty: 0.5
+        };
+        
+        // 格式化数字，保留两位小数
+        function formatNumber(num) {
+            if (typeof num !== 'number' || isNaN(num)) {
+                return '0.00';
+            }
+            return num.toFixed(2);
+        }
+        
+        // 格式化整数，保留两位小数
+        function formatInteger(num) {
+            if (typeof num !== 'number' || isNaN(num)) {
+                return '0.00';
+            }
+            return Math.round(num).toFixed(2);
+        }
+        function initializeData() {
+            try {
+                // 尝试从本地存储读取生产记录
+                const storedRecords = localStorage.getItem('productionRecords');
+                if (storedRecords) {
+                    const parsedRecords = JSON.parse(storedRecords);
+                    if (Array.isArray(parsedRecords)) {
+                        productionRecords = parsedRecords;
+                        
+                        // 为现有记录添加隐藏编号（如果没有的话）
+                        let maxRecordNumber = 0;
+                        productionRecords.forEach(record => {
+                            if (!record.recordNumber) {
+                                record.recordNumber = ++maxRecordNumber;
+                            } else if (record.recordNumber > maxRecordNumber) {
+                                maxRecordNumber = record.recordNumber;
+                            }
+                        });
+                        
+                        // 保存更新后的记录
+                        localStorage.setItem('productionRecords', JSON.stringify(productionRecords));
+                        
+                        console.log('成功加载', productionRecords.length, '条生产记录');
+                    } else {
+                        console.warn('本地存储中的生产记录格式不正确，已重置为空数组');
+                        productionRecords = [];
+                    }
+                } else {
+                    console.log('本地存储中没有生产记录，已初始化为空数组');
+                }
+                
+                // 尝试从本地存储读取设置
+                const storedSettings = localStorage.getItem('settings');
+                if (storedSettings) {
+                    const parsedSettings = JSON.parse(storedSettings);
+                    if (typeof parsedSettings === 'object' && parsedSettings !== null) {
+                        settings = { ...settings, ...parsedSettings };
+                        console.log('成功加载设置:', settings);
+                    }
+                }
+                
+                // 加载或初始化记录编号计数器
+                let recordCounter = parseInt(localStorage.getItem('recordCounter')) || 0;
+                const maxExistingNumber = Math.max(...productionRecords.map(r => r.recordNumber || 0), 0);
+                if (maxExistingNumber > recordCounter) {
+                    recordCounter = maxExistingNumber;
+                    localStorage.setItem('recordCounter', recordCounter.toString());
+                }
+                
+                console.log('初始化完成，当前记录编号计数器:', recordCounter);
+            } catch (error) {
+                console.error('初始化数据时出错:', error);
+                productionRecords = [];
+                showNotification('警告', '加载数据时出错，部分功能可能受限', 'warning');
+            }
+        }
+        let currentDate = new Date();
+        let recordToDelete = null;
+        let deleteMode = null;
+        let recordsToDelete = [];
+        
+        // DOM 元素
+        const currentDateTimeEl = document.getElementById('current-date-time');
+        const recordTab = document.getElementById('record-tab');
+        const historyTab = document.getElementById('history-tab');
+        const statisticsTab = document.getElementById('statistics-tab');
+        const navLinks = document.querySelectorAll('.nav-link');
+        const productionForm = document.getElementById('production-form');
+        const todayRecordsEl = document.getElementById('today-records');
+        const historyRecordsEl = document.getElementById('history-records');
+        const settingsBtn = document.getElementById('settings-btn');
+        const settingsModal = document.getElementById('settings-modal');
+        const closeSettingsBtn = document.getElementById('close-settings');
+        const settingsForm = document.getElementById('settings-form');
+        const saveSettingsBtn = document.getElementById('save-settings');
+        const resetSettingsBtn = document.getElementById('reset-settings');
+        const deleteModal = document.getElementById('delete-modal');
+        const cancelDeleteBtn = document.getElementById('cancel-delete');
+        const confirmDeleteBtn = document.getElementById('confirm-delete');
+        const notification = document.getElementById('notification');
+        const notificationTitle = document.getElementById('notification-title');
+        const notificationMessage = document.getElementById('notification-message');
+        const notificationIcon = document.getElementById('notification-icon');
+        const closeNotificationBtn = document.getElementById('close-notification');
+        const resetFormBtn = document.getElementById('reset-form');
+        const historyMachineFilter = document.getElementById('history-machine-filter');
+        const historyMonthFilter = document.getElementById('history-month-filter');
+        const startTimeEl = document.getElementById('start-time');
+        const endTimeEl = document.getElementById('end-time');
+        const productNameEl = document.getElementById('product-name');
+        const confirmProductBtn = document.getElementById('confirm-product');
+        const cancelConfirmBtn = document.getElementById('cancel-confirm');
+        const remarksEl = document.getElementById('remarks');
+        
+        // 统计元素
+        const circleMachineCountEl = document.getElementById('circle-machine-count');
+        const flatMachineCountEl = document.getElementById('flat-machine-count');
+        const circleMachineProgressEl = document.getElementById('circle-machine-progress');
+        const flatMachineProgressEl = document.getElementById('flat-machine-progress');
+        const totalCutsEl = document.getElementById('total-cuts');
+        const overtimeHoursEl = document.getElementById('overtime-hours');
+        const circleMachineCountMobileEl = document.getElementById('circle-machine-count-mobile');
+        const flatMachineCountMobileEl = document.getElementById('flat-machine-count-mobile');
+        const totalCutsMobileEl = document.getElementById('total-cuts-mobile');
+        const overtimeHoursMobileEl = document.getElementById('overtime-hours-mobile');
+        const avgDailyProductionEl = document.getElementById('avg-daily-production');
+        const avgProductionChangeEl = document.getElementById('avg-production-change');
+        const avgSetupTimeEl = document.getElementById('avg-setup-time');
+        const avgSetupChangeEl = document.getElementById('avg-setup-change');
+        const avgOvertimeEl = document.getElementById('avg-overtime');
+        const avgOvertimeChangeEl = document.getElementById('avg-overtime-change');
+        const efficiencyRankingEl = document.getElementById('efficiency-ranking');
+        
+        // 初始化
+        function init() {
+            // 首先初始化数据
+            initializeData();
+            
+            updateCurrentDateTime();
+            setCurrentDateTimeInputs();
+            setupEventListeners();
+            renderTodayRecords();
+            renderHistoryRecords();
+            updateDashboard();
+            initStatistics();
+            setHistoryMonthFilter();
+        }
+        
+        // 更新当前日期时间
+        function updateCurrentDateTime() {
+            const now = new Date();
+            currentDateTimeEl.textContent = now.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            setTimeout(updateCurrentDateTime, 1000);
+        }
+        
+        // 设置当前日期时间输入框
+        function setCurrentDateTimeInputs() {
+            const now = new Date();
+            const dateTimeString = now.toISOString().slice(0, 16);
+            startTimeEl.value = dateTimeString;
+            endTimeEl.value = dateTimeString;
+        }
+        
+        // 设置历史记录月份筛选器
+        function setHistoryMonthFilter() {
+            const now = new Date();
+            const yearMonth = now.toISOString().slice(0, 7);
+            historyMonthFilter.value = yearMonth;
+        }
+        
+        // 设置事件监听器
+        function setupEventListeners() {
+            // 删除按钮事件监听器
+            const deleteAllBtn = document.getElementById('delete-all-btn');
+            const deleteMonthBtn = document.getElementById('delete-month-btn');
+            
+            if (deleteAllBtn) {
+                deleteAllBtn.addEventListener('click', confirmDeleteAllRecords);
+            }
+            
+            if (deleteMonthBtn) {
+                deleteMonthBtn.addEventListener('click', confirmDeleteMonthRecords);
+            }
+            
+            // 为动态生成的按钮添加事件委托
+            document.addEventListener('click', function(e) {
+                // 编辑记录
+                if (e.target.closest('.edit-record-btn')) {
+                    const btn = e.target.closest('.edit-record-btn');
+                    const recordId = btn.getAttribute('data-record-id');
+                    if (recordId) {
+                        editRecord(recordId);
+                    }
+                }
+                
+                // 删除单条记录
+                if (e.target.closest('.delete-record-btn')) {
+                    const btn = e.target.closest('.delete-record-btn');
+                    const recordId = btn.getAttribute('data-record-id');
+                    if (recordId) {
+                        confirmDeleteRecord(recordId);
+                    }
+                }
+                
+                // 删除当日记录
+                if (e.target.closest('.delete-day-btn')) {
+                    const btn = e.target.closest('.delete-day-btn');
+                    const date = btn.getAttribute('data-date');
+                    if (date) {
+                        confirmDeleteDayRecords(date);
+                    }
+                }
+            });
+            // 导航切换
+            navLinks.forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const tabId = link.getAttribute('data-tab');
+                    
+                    // 更新导航链接状态
+                    navLinks.forEach(l => l.classList.remove('active'));
+                    link.classList.add('active');
+                    
+                    // 显示对应标签内容
+                    document.querySelectorAll('.tab-content').forEach(tab => {
+                        tab.classList.remove('active');
+                    });
+                    document.getElementById(`${tabId}-tab`).classList.add('active');
+                    
+                    // 如果切换到统计页面，初始化图表
+                    if (tabId === 'statistics') {
+                        initCharts();
+                    }
+                });
+            });
+            
+            // 表单提交
+            productionForm.addEventListener('submit', handleFormSubmit);
+            
+            // 设置按钮
+            settingsBtn.addEventListener('click', () => {
+                loadSettings();
+                settingsModal.classList.remove('hidden');
+            });
+            
+            closeSettingsBtn.addEventListener('click', () => {
+                settingsModal.classList.add('hidden');
+            });
+            
+            saveSettingsBtn.addEventListener('click', saveSettings);
+            
+            resetSettingsBtn.addEventListener('click', resetSettings);
+            
+            // 删除确认
+            cancelDeleteBtn.addEventListener('click', () => {
+                deleteModal.classList.add('hidden');
+                recordToDelete = null;
+                deleteMode = null;
+                recordsToDelete = [];
+            });
+            
+            confirmDeleteBtn.addEventListener('click', () => {
+                if (deleteMode && recordsToDelete.length > 0) {
+                    executeDelete();
+                } else {
+                    deleteRecord();
+                }
+            });
+            
+            // 关闭通知
+            closeNotificationBtn.addEventListener('click', () => {
+                notification.classList.remove('translate-x-0');
+                notification.classList.add('translate-x-full');
+            });
+            
+            // 重置表单
+            resetFormBtn.addEventListener('click', () => {
+                productionForm.reset();
+                setCurrentDateTimeInputs();
+                startTimeEl.disabled = false;
+                confirmProductBtn.disabled = false;
+                cancelConfirmBtn.disabled = true;
+            });
+            
+            // 产品名称确认
+            confirmProductBtn.addEventListener('click', () => {
+                const productName = productNameEl.value.trim();
+                if (!productName) {
+                    showNotification('错误', '请输入产品名称', 'error');
+                    return;
+                }
+                
+                // 锁定开机时间，但保持产品名称可编辑
+                startTimeEl.disabled = true;
+                confirmProductBtn.disabled = true;
+                cancelConfirmBtn.disabled = false;
+                
+                showNotification('成功', '开机时间已锁定，产品名称仍可编辑', 'success');
+            });
+            
+            // 取消产品名称确认
+            cancelConfirmBtn.addEventListener('click', () => {
+                // 解锁开机时间
+                startTimeEl.disabled = false;
+                confirmProductBtn.disabled = false;
+                cancelConfirmBtn.disabled = true;
+                
+                showNotification('提示', '已取消确认，开机时间已解锁', 'info');
+            });
+            
+            // 历史记录导出
+            const exportRecordsBtn = document.getElementById('export-records-btn');
+            if (exportRecordsBtn) {
+                exportRecordsBtn.addEventListener('click', exportRecords);
+            }
+            
+            // 历史记录导入
+            const importRecordsBtn = document.getElementById('import-records-btn');
+            const importFileInput = document.getElementById('import-file-input');
+            
+            if (importRecordsBtn && importFileInput) {
+                importRecordsBtn.addEventListener('click', () => {
+                    importFileInput.click();
+                });
+                
+                importFileInput.addEventListener('change', async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    
+                    try {
+                        showNotification('信息', '正在导入记录，请稍候...', 'info');
+                        
+                        const result = await importRecords(file);
+                        
+                        if (result.success) {
+                            showNotification('成功', `成功导入 ${result.imported} 条记录，总计 ${result.total} 条记录`, 'success');
+                            
+                            // 刷新界面
+                            renderTodayRecords();
+                            renderHistoryRecords();
+                            updateDashboard();
+                            initStatistics();
+                        }
+                    } catch (error) {
+                        console.error('导入失败:', error);
+                        showNotification('错误', '导入失败：' + error.message, 'error');
+                    } finally {
+                        // 清空文件输入
+                        importFileInput.value = '';
+                    }
+                });
+            }
+            
+            // 历史记录筛选
+            historyMachineFilter.addEventListener('change', renderHistoryRecords);
+            historyMonthFilter.addEventListener('change', renderHistoryRecords);
+            
+            // 点击模态框外部关闭
+            settingsModal.addEventListener('click', (e) => {
+                if (e.target === settingsModal) {
+                    settingsModal.classList.add('hidden');
+                }
+            });
+            
+            deleteModal.addEventListener('click', (e) => {
+                if (e.target === deleteModal) {
+                    deleteModal.classList.add('hidden');
+                    recordToDelete = null;
+                }
+            });
+        }
+        
+        // 编辑记录
+        function editRecord(recordId) {
+            console.log('开始编辑记录:', recordId);
+            
+            // 查找记录
+            const recordIndex = productionRecords.findIndex(r => r.id === recordId);
+            if (recordIndex === -1) {
+                showNotification('错误', '未找到要编辑的记录', 'error');
+                return;
+            }
+            
+            const record = productionRecords[recordIndex];
+            console.log('找到记录:', record);
+            
+            // 填充表单数据
+            if (document.getElementById('machine-type')) {
+                document.getElementById('machine-type').value = record.machineType || 'circle';
+            }
+            if (document.getElementById('product-name')) {
+                document.getElementById('product-name').value = record.productName || '';
+            }
+            if (document.getElementById('start-time')) {
+                document.getElementById('start-time').value = record.startTime || '';
+            }
+            if (document.getElementById('end-time')) {
+                document.getElementById('end-time').value = record.endTime || '';
+            }
+            if (document.getElementById('setup-time')) {
+                document.getElementById('setup-time').value = record.setupTime || 0;
+            }
+            if (document.getElementById('cuts')) {
+                document.getElementById('cuts').value = record.cuts || 0;
+            }
+            if (document.getElementById('completed-per-cut')) {
+                document.getElementById('completed-per-cut').value = record.completedPerCut || 1;
+            }
+            if (document.getElementById('remarks')) {
+                document.getElementById('remarks').value = record.remarks || '';
+            }
+            
+            // 锁定开机时间
+            const startTimeEl = document.getElementById('start-time');
+            const confirmProductBtn = document.getElementById('confirm-product');
+            const cancelConfirmBtn = document.getElementById('cancel-confirm');
+            
+            if (startTimeEl) startTimeEl.disabled = true;
+            if (confirmProductBtn) confirmProductBtn.disabled = true;
+            if (cancelConfirmBtn) cancelConfirmBtn.disabled = false;
+            
+            // 保存编辑状态
+            window.editingRecordId = recordId;
+            window.editingRecordIndex = recordIndex;
+            
+            // 更改表单提交按钮文本
+            const submitBtn = document.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.textContent = '更新记录';
+                submitBtn.classList.remove('bg-primary');
+                submitBtn.classList.add('bg-blue-600');
+            }
+            
+            // 滚动到表单位置
+            const formSection = document.getElementById('production-form-section');
+            if (formSection) {
+                formSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+            
+            showNotification('提示', '请修改记录信息，完成后点击"更新记录"', 'info');
+        }
+
+        // 处理表单提交
+        function handleFormSubmit(e) {
+            e.preventDefault();
+            
+            try {
+                console.log('=== 开始处理表单提交 ===');
+                
+                // 检查必要的DOM元素是否存在
+                if (!productionForm) {
+                    console.error('productionForm元素未找到');
+                    showNotification('错误', '系统初始化失败', 'error');
+                    return;
+                }
+                
+                const formData = new FormData(productionForm);
+                
+                // 获取表单数据
+                const machineType = formData.get('machineType');
+                const productName = (formData.get('productName') || '').trim();
+                // 直接从input元素获取时间值，确保能正确获取
+                const startTimeStr = document.getElementById('start-time').value;
+                const endTimeStr = document.getElementById('end-time').value;
+                const setupTimeStr = formData.get('setupTime');
+                const cutsStr = formData.get('cuts');
+                const completedPerCutStr = formData.get('completedPerCut');
+                const remarks = formData.get('remarks') || '';
+                
+                console.log('表单数据:', {
+                    machineType,
+                    productName,
+                    startTimeStr,
+                    endTimeStr,
+                    setupTimeStr,
+                    cutsStr,
+                    completedPerCutStr,
+                    remarks
+                });
+                
+                // 验证必填字段
+                if (!machineType) {
+                    showNotification('错误', '请选择机器类型', 'error');
+                    return;
+                }
+                
+                if (!productName) {
+                    showNotification('错误', '请输入产品名称', 'error');
+                    return;
+                }
+                
+                if (!startTimeStr) {
+                    showNotification('错误', '请选择开机时间', 'error');
+                    return;
+                }
+                
+                if (!endTimeStr) {
+                    showNotification('错误', '请选择结束时间', 'error');
+                    return;
+                }
+                
+                // 验证数字字段
+                const setupTime = parseInt(setupTimeStr) || 0;
+                const cuts = parseInt(cutsStr) || 0;
+                const completedPerCut = parseInt(completedPerCutStr) || 1;
+                
+                console.log('数字字段转换结果:', { setupTime, cuts, completedPerCut });
+                
+                if (setupTime < 0) {
+                    showNotification('错误', '调机时间不能为负数', 'error');
+                    return;
+                }
+                
+                if (cuts < 0) {
+                    showNotification('错误', '模切刀数不能为负数', 'error');
+                    return;
+                }
+                
+                if (completedPerCut < 1) {
+                    showNotification('错误', '每刀完成数不能小于1', 'error');
+                    return;
+                }
+                
+                // 验证日期时间（移除重复验证）
+                console.log('开始验证时间 - startTimeStr:', startTimeStr, 'endTimeStr:', endTimeStr);
+                
+                let startTime, endTime;
+                try {
+                    // 尝试解析时间字符串
+                    startTime = new Date(startTimeStr);
+                    endTime = new Date(endTimeStr);
+                    
+                    console.log('时间解析结果 - startTime:', startTime, 'isValid:', !isNaN(startTime.getTime()));
+                    console.log('时间解析结果 - endTime:', endTime, 'isValid:', !isNaN(endTime.getTime()));
+                    
+                    // 验证时间是否有效
+                    if (isNaN(startTime.getTime())) {
+                        showNotification('错误', '开机时间格式无效，请重新选择', 'error');
+                        return;
+                    }
+                    
+                    if (isNaN(endTime.getTime())) {
+                        showNotification('错误', '结束时间格式无效，请重新选择', 'error');
+                        return;
+                    }
+                    
+                    // 验证时间顺序
+                    if (endTime <= startTime) {
+                        showNotification('错误', '结束时间不能早于或等于开始时间', 'error');
+                        return;
+                    }
+                    
+                } catch (dateError) {
+                    console.error('日期时间解析失败:', dateError, 'startTimeStr:', startTimeStr, 'endTimeStr:', endTimeStr);
+                    showNotification('错误', '日期时间格式错误，请检查输入', 'error');
+                    return;
+                }
+                
+                // 获取下一个记录编号
+                let recordCounter = parseInt(localStorage.getItem('recordCounter')) || 0;
+                const recordNumber = ++recordCounter;
+                localStorage.setItem('recordCounter', recordCounter.toString());
+                
+                // 创建记录对象
+                const record = {
+                    id: Date.now().toString(),
+                    recordNumber: recordNumber,
+                    machineType: machineType,
+                    productName: productName,
+                    startTime: startTimeStr,
+                    setupTime: setupTime,
+                    cuts: cuts,
+                    completedPerCut: completedPerCut,
+                    endTime: endTimeStr,
+                    remarks: remarks,
+                    date: startTime.toISOString().split('T')[0],
+                    createdAt: new Date().toISOString()
+                };
+                
+                console.log('创建的记录对象:', record);
+                
+                // 计算工作时间
+                const workDuration = (endTime - startTime) / (1000 * 60 * 60);
+                record.workDuration = workDuration;
+                
+                // 从备注中提取时间扣除（区分机器类型）
+                let remarksTimeDeduction = 0;
+                if (remarks && typeof remarks === 'string') {
+                    try {
+                        // 提取分钟格式（如：30分钟）
+                        const minuteMatch = remarks.match(/(\d+)\s*分(钟)?/);
+                        if (minuteMatch && minuteMatch[1]) {
+                            remarksTimeDeduction += parseInt(minuteMatch[1]) / 60;
+                        }
+                        
+                        // 提取小时格式（如：2小时 或 1.5小时）
+                        const hourMatch = remarks.match(/(\d+(?:\.\d+)?)\s*小时?/);
+                        if (hourMatch && hourMatch[1]) {
+                            remarksTimeDeduction += parseFloat(hourMatch[1]);
+                        }
+                        
+                        // 提取纯数字（根据机器类型进行不同的扣除规则）
+                        const numberMatches = remarks.match(/\b(\d+)\b/g);
+                        if (numberMatches) {
+                            numberMatches.forEach(match => {
+                                if (match) {
+                                    const num = parseInt(match);
+                                    if (!isNaN(num)) {
+                                        // 根据机器类型应用不同的扣除系数
+                                        let deductionFactor = 0;
+                                        if (machineType === 'circle') {
+                                            // 圆模切机：数字直接转换为分钟
+                                            deductionFactor = num / 60;
+                                        } else if (machineType === 'flat') {
+                                            // 平压模切机：数字除以2转换为分钟
+                                            deductionFactor = (num / 2) / 60;
+                                        }
+                                        
+                                        // 避免重复扣除（如果数字已经被时间格式匹配过）
+                                        const isAlreadyMatched = (minuteMatch && minuteMatch[1] == num) || 
+                                                               (hourMatch && parseInt(hourMatch[1]) == num);
+                                        
+                                        if (!isAlreadyMatched && deductionFactor > 0) {
+                                            remarksTimeDeduction += deductionFactor;
+                                            console.log(`为${machineType === 'circle' ? '圆模切机' : '平压模切机'}添加数字扣除: ${num} -> ${deductionFactor.toFixed(2)}小时`);
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                    } catch (regexError) {
+                        console.error('正则表达式匹配失败:', regexError);
+                    }
+                }
+                
+                console.log('时间扣除计算:', { remarksTimeDeduction, setupTime });
+                
+                // 计算调机时间（小时）
+                const setupTimeHours = setupTime / 60;
+                
+                // 计算有效工作时间（不再扣除调机时间和备注扣除）
+                const lunchBreakMinutes = settings?.lunchBreak || 30; // 默认扣除30分钟午餐时间
+                const lunchBreakHours = lunchBreakMinutes / 60;
+                const effectiveWorkTime = workDuration - lunchBreakHours;
+                record.effectiveWorkTime = Math.max(0, effectiveWorkTime);
+                record.remarksTimeDeduction = remarksTimeDeduction;
+                record.lunchBreakMinutes = lunchBreakMinutes; // 记录午餐时间
+                record.setupTimeHours = setupTimeHours; // 记录调机时间（小时）
+                
+                // 计算加班时间 - 最终优化算法
+                // 核心原则：午餐时间不计入加班，调机时间和备注扣除也不计入加班
+                // 实际应工作时间 = 基础工作时间（8小时）
+                // 实际工作时间 = 总工作时长 - 午餐时间
+                // 加班时长 = max(0, 实际工作时间 - 实际应工作时间)
+                
+                const actualWorkHours = workDuration - lunchBreakHours;
+                const shouldWorkHours = 8; // 基础工作时间8小时
+                record.overtime = Math.max(0, actualWorkHours - shouldWorkHours);
+                
+                console.log('工作时间计算:', { 
+                    workDuration, 
+                    effectiveWorkTime,
+                    lunchBreakMinutes,
+                    lunchBreakHours,
+                    setupTimeHours,
+                    remarksTimeDeduction,
+                    actualWorkHours,
+                    shouldWorkHours,
+                    overtime: record.overtime
+                });
+                
+                // 检查productionRecords是否为数组
+                if (!Array.isArray(productionRecords)) {
+                    console.error('productionRecords不是数组:', productionRecords);
+                    productionRecords = [];
+                }
+                
+                // 添加到记录数组
+                productionRecords.push(record);
+                console.log('记录已添加到数组，当前长度:', productionRecords.length);
+                
+                // 保存到本地存储
+                console.log('开始保存记录...');
+                try {
+                    localStorage.setItem('productionRecords', JSON.stringify(productionRecords));
+                    console.log('记录已成功保存到本地存储');
+                    
+                    // 保存成功
+                    console.log('保存成功！');
+                    
+                    // 根据模式显示不同的成功消息
+                    if (isEditing) {
+                        showNotification('成功', '生产记录已更新', 'success');
+                    } else {
+                        showNotification('成功', '生产记录已保存', 'success');
+                    }
+                    
+                    // 重置表单
+                    try {
+                        productionForm.reset();
+                        if (typeof setCurrentDateTimeInputs === 'function') {
+                            setCurrentDateTimeInputs();
+                        }
+                        
+                        // 重置按钮状态
+                        if (startTimeEl) startTimeEl.disabled = false;
+                        if (productNameEl) productNameEl.disabled = false;
+                        if (confirmProductBtn) confirmProductBtn.disabled = false;
+                        if (cancelConfirmBtn) cancelConfirmBtn.disabled = true;
+                        
+                        // 重置编辑状态
+                        window.editingRecordId = null;
+                        window.editingRecordIndex = null;
+                        
+                        // 恢复提交按钮状态
+                        const submitBtn = document.querySelector('button[type="submit"]');
+                        if (submitBtn) {
+                            submitBtn.textContent = '保存记录';
+                            submitBtn.classList.remove('bg-blue-600');
+                            submitBtn.classList.add('bg-primary');
+                        }
+                    } catch (resetError) {
+                        console.error('重置表单时出错:', resetError);
+                    }
+                    
+                    // 刷新显示
+                    console.log('刷新界面显示...');
+                    renderTodayRecords();
+                    renderHistoryRecords();
+                    updateDashboard();
+                    
+                    console.log('=== 表单处理完成 ===');
+                } catch (saveError) {
+                    // 保存失败，处理回滚
+                    console.error('保存失败，回滚操作:', saveError);
+                    if (!isEditing) {
+                        productionRecords.pop();
+                    }
+                    showNotification('错误', '保存记录失败，请重试', 'error');
+                    return;
+                }
+            } catch (error) {
+                console.error('处理表单提交时发生错误:', error);
+                console.error('错误名称:', error.name);
+                console.error('错误消息:', error.message);
+                console.error('错误堆栈:', error.stack);
+                console.error('表单数据:', {
+                    machineType,
+                    productName,
+                    startTimeStr,
+                    endTimeStr,
+                    setupTimeStr,
+                    cutsStr,
+                    completedPerCutStr,
+                    remarks
+                });
+                showNotification('错误', `处理数据时发生错误: ${error.message}`, 'error');
+            }
+        }
+        
+        // 渲染今日记录
+        function renderTodayRecords() {
+            console.log('开始渲染今日记录，总记录数:', productionRecords.length);
+            
+            // 获取今日日期（使用本地时间）
+            const today = new Date();
+            const todayYear = today.getFullYear();
+            const todayMonth = String(today.getMonth() + 1).padStart(2, '0');
+            const todayDay = String(today.getDate()).padStart(2, '0');
+            const todayStr = `${todayYear}-${todayMonth}-${todayDay}`;
+            console.log('今日日期:', todayStr);
+            
+            // 过滤今日记录 - 优先使用record.date字段，确保与历史记录保持一致
+            const todayRecords = productionRecords.filter(record => {
+                // 首先检查record.date字段
+                if (record.date) {
+                    const isToday = record.date === todayStr;
+                    if (isToday) {
+                        console.log('找到今日记录(通过date字段):', record.id, record.productName, record.date);
+                    }
+                    return isToday;
+                }
+                
+                // 如果没有date字段，尝试从startTime解析
+                if (record.startTime) {
+                    try {
+                        const startDate = new Date(record.startTime);
+                        if (!isNaN(startDate.getTime())) {
+                            const recordDate = startDate.toISOString().split('T')[0];
+                            const isToday = recordDate === todayStr;
+                            if (isToday) {
+                                console.log('找到今日记录(通过startTime解析):', record.id, record.productName, recordDate);
+                                // 修复记录，添加date字段
+                                record.date = recordDate;
+                            }
+                            return isToday;
+                        }
+                    } catch (error) {
+                        console.error('解析记录日期失败:', record.id, record.startTime, error);
+                    }
+                }
+                
+                return false;
+            });
+            
+            console.log('今日记录数:', todayRecords.length);
+            
+            if (todayRecords.length === 0) {
+                console.log('今日无记录，显示空状态');
+                todayRecordsEl.innerHTML = `
+                    <div class="text-center text-gray-500 py-8">
+                        <i class="fa fa-clipboard text-4xl mb-2"></i>
+                        <p>今日暂无生产记录</p>
+                        <p class="text-xs text-gray-400 mt-1">总记录数: ${productionRecords.length}</p>
+                        <p class="text-xs text-gray-400 mt-1">今日日期: ${todayStr}</p>
+                    </div>
+
+
+                `;
+                return;
+            }
+            
+            console.log('准备渲染今日记录，数量:', todayRecords.length);
+            
+            // 修复：确保map函数正确执行并返回字符串
+            const recordsHTML = todayRecords.map(record => {
+                console.log('渲染记录:', record.id, record.productName, record.date);
+                
+                // 确保记录数据完整
+                if (!record || !record.id || !record.productName) {
+                    console.error('无效的记录数据:', record);
+                    return '';
+                }
+                
+                const machineTypeText = record.machineType === 'circle' ? '圆模切机' : '平压模切机';
+                const machineTypeClass = record.machineType === 'circle' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800';
+                
+                // 安全的时间格式化
+                let startTime = 'N/A';
+                let endTime = 'N/A';
+                try {
+                    if (record.startTime) {
+                        startTime = new Date(record.startTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+                    }
+                    if (record.endTime) {
+                        endTime = new Date(record.endTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+                    }
+                } catch (error) {
+                    console.error('时间格式化失败:', record.id, error);
+                }
+                
+                // 计算目标完成率 - 使用新的算法
+                // 核心原则：圆模切机和平压模切机当日上班时长总和为8小时
+                // 每日目标 = (可用时间 - K * 记录数) * G
+                // 可用时间 = 总可用时间 * (该机器类型工作时长 / 总工作时长)
+                // 总可用时间 = 8 - 总调机时间 - 总备注扣除时间
+                // K值：圆模切机为0.25，平压模切机为0.5
+                // G值：圆模切机为6250，平压模切机为13750
+                const K = record.machineType === 'circle' ? 0.25 : 0.5;
+                const G = record.machineType === 'circle' ? 6250 : 13750;
+                
+                // 计算今日所有记录
+                const todayCircleRecords = todayRecords.filter(r => r.machineType === 'circle');
+                const todayFlatRecords = todayRecords.filter(r => r.machineType === 'flat');
+                
+                // 计算总调机时间和总备注扣除时间
+                const totalSetupTime = todayRecords.reduce((sum, r) => sum + ((r.setupTime || 0) / 60), 0);
+                const totalRemarksDeduction = todayRecords.reduce((sum, r) => sum + (r.remarksTimeDeduction || 0), 0);
+                const totalAvailableHours = Math.max(0, 8 - totalSetupTime - totalRemarksDeduction);
+                
+                // 计算各类机器的总工作时长
+                const circleTotalWorkHours = todayCircleRecords.reduce((sum, r) => sum + ((r.workDuration || 0) - ((r.lunchBreakMinutes || 30) / 60)), 0);
+                const flatTotalWorkHours = todayFlatRecords.reduce((sum, r) => sum + ((r.workDuration || 0) - ((r.lunchBreakMinutes || 30) / 60)), 0);
+                const totalWorkHours = circleTotalWorkHours + flatTotalWorkHours;
+                
+                let dailyTarget = 0;
+                
+                if (totalWorkHours > 0) {
+                    // 根据工作时长比例分配可用时间
+                    const machineTimeRatio = record.machineType === 'circle' ? 
+                        (circleTotalWorkHours / totalWorkHours) : (flatTotalWorkHours / totalWorkHours);
+                    const machineAvailableHours = totalAvailableHours * machineTimeRatio;
+                    
+                    // 计算该机器类型的记录数
+                    const sameTypeRecordsCount = record.machineType === 'circle' ? 
+                        todayCircleRecords.length : todayFlatRecords.length;
+                    
+                    dailyTarget = Math.max(0, (machineAvailableHours - K * sameTypeRecordsCount)) * G;
+                } else {
+                    // 如果没有工作时长记录，平均分配时间
+                    const avgAvailableHours = totalAvailableHours / 2;
+                    const sameTypeRecordsCount = record.machineType === 'circle' ? 
+                        todayCircleRecords.length : todayFlatRecords.length;
+                    
+                    dailyTarget = Math.max(0, (avgAvailableHours - K * sameTypeRecordsCount)) * G;
+                }
+                
+                const completionRate = dailyTarget > 0 ? (record.cuts / dailyTarget) * 100 : 0;
+                
+                console.log('机器类型:', machineTypeText, '同类型记录数:', todaySameTypeRecords, 'K值:', K, 'G值:', G, '每日目标:', dailyTarget, '实际产能:', record.cuts, '完成率:', completionRate.toFixed(2) + '%');
+                
+                let progressClass = 'progress-success';
+                if (completionRate < 50) progressClass = 'progress-danger';
+                else if (completionRate < 80) progressClass = 'progress-warning';
+                
+                return `
+                    <div class="bg-gray-50 rounded-lg p-4 card-hover">
+                        <div class="flex justify-between items-start mb-3">
+                            <div>
+                                <h3 class="text-lg font-medium text-gray-900">${record.productName || '未命名产品'}</h3>
+                                <div class="flex items-center mt-1">
+                                    <span class="badge ${machineTypeClass}">${machineTypeText}</span>
+                                    <span class="text-sm text-gray-500 ml-2">${startTime} - ${endTime}</span>
+                                </div>
+
+
+                            </div>
+
+
+                            <div class="flex items-center space-x-2">
+                                <button class="text-blue-500 hover:text-blue-600 edit-record-btn" data-record-id="${record.id}" title="编辑记录">
+                                    <i class="fa fa-pencil"></i>
+                                </button>
+                                <button class="text-red-500 hover:text-red-600 delete-record-btn" data-record-id="${record.id}">
+                                    <i class="fa fa-trash"></i>
+                                </button>
+                            </div>
+
+
+                        </div>
+
+
+                        
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                            <div>
+                                <p class="text-xs text-gray-500">模切刀数</p>
+                                <p class="text-sm font-medium">${formatInteger(record.cuts)}</p>
+                            </div>
+
+
+                            <div>
+                                <p class="text-xs text-gray-500">完成数量</p>
+                                <p class="text-sm font-medium">${formatInteger(record.cuts * (record.completedPerCut || 1))}</p>
+                            </div>
+
+
+                            <div>
+                                <p class="text-xs text-gray-500">调机时间</p>
+                                <p class="text-sm font-medium">${record.setupTime} 分钟</p>
+                            </div>
+
+
+                            <div>
+                                <p class="text-xs text-gray-500">加班时长</p>
+                                <p class="text-sm font-medium ${typeof record.overtime === 'number' && record.overtime > 0 ? 'text-secondary font-semibold' : ''}">
+                                    ${typeof record.overtime === 'number' && !isNaN(record.overtime) ? record.overtime.toFixed(2) : 0.00} 小时
+                                </p>
+                            </div>
+
+
+                        </div>
+
+
+                        
+                        <div class="mb-2 flex justify-between items-center">
+                            <span class="text-xs font-medium text-gray-700">目标完成率</span>
+                            <span class="text-xs font-medium ${completionRate >= 100 ? 'text-green-600' : 'text-gray-700'}">${completionRate.toFixed(2)}%</span>
+                        </div>
+
+
+                        <div class="progress-bar">
+                            <div class="progress-value ${progressClass}" style="width: ${Math.min(completionRate, 100)}%"></div>
+                        </div>
+
+
+                        
+                        ${record.remarks ? `<p class="text-xs text-gray-500 mt-3">备注: ${record.remarks}</p>` : ''}
+                    </div>
+
+
+                `;
+            }).join('');
+            
+            // 将生成的HTML设置到DOM元素中
+            todayRecordsEl.innerHTML = recordsHTML;
+        }
+        
+        // 渲染历史记录
+        function renderHistoryRecords() {
+            console.log('开始渲染历史记录，总记录数:', productionRecords.length);
+            const machineFilter = historyMachineFilter.value;
+            const monthFilter = historyMonthFilter.value;
+            console.log('筛选条件 - 机器类型:', machineFilter, '月份:', monthFilter);
+            
+            // 筛选记录
+            let filteredRecords = [...productionRecords];
+            
+            if (machineFilter !== 'all') {
+                filteredRecords = filteredRecords.filter(record => record.machineType === machineFilter);
+            }
+            
+            if (monthFilter) {
+                filteredRecords = filteredRecords.filter(record => record.date.startsWith(monthFilter));
+            }
+            
+            // 按日期分组
+            const recordsByDate = {};
+            filteredRecords.forEach(record => {
+                let recordDate = '1970-01-01'; // 设置默认值以便调试
+                
+                // 优先使用记录中的date字段
+                if (record.date) {
+                    // 验证date字段格式是否正确
+                    const dateTest = new Date(record.date);
+                    if (!isNaN(dateTest.getTime())) {
+                        recordDate = record.date;
+                    } else {
+                        console.warn('历史记录分组 - date字段格式不正确:', record.id, record.date);
+                    }
+                }
+                
+                // 如果date字段无效，尝试从startTime解析
+                if (recordDate === '1970-01-01' && record.startTime) {
+                    try {
+                        const startDate = new Date(record.startTime);
+                        if (!isNaN(startDate.getTime())) {
+                            recordDate = startDate.toISOString().split('T')[0];
+                            // 修复记录中的date字段
+                            record.date = recordDate;
+                        } else {
+                            console.error('历史记录分组 - 无效的startTime:', record.id, record.startTime);
+                        }
+                    } catch (error) {
+                        console.error('历史记录分组 - 解析日期失败:', record.id, record.startTime, error);
+                    }
+                }
+                
+                // 如果仍然无法获取有效日期，使用当前日期
+                if (recordDate === '1970-01-01') {
+                    recordDate = new Date().toISOString().split('T')[0];
+                    record.date = recordDate;
+                    console.warn('历史记录分组 - 使用当前日期作为默认值:', record.id);
+                }
+                
+                if (!recordsByDate[recordDate]) {
+                    recordsByDate[recordDate] = [];
+                }
+                recordsByDate[recordDate].push(record);
+            });
+            
+            // 按日期排序（降序）
+            const sortedDates = Object.keys(recordsByDate).sort((a, b) => new Date(b) - new Date(a));
+            
+            if (sortedDates.length === 0) {
+                historyRecordsEl.innerHTML = `
+                    <div class="text-center text-gray-500 py-8">
+                        <i class="fa fa-history text-4xl mb-2"></i>
+                        <p>暂无历史记录</p>
+                    </div>
+
+
+                `;
+                return;
+            }
+            
+            historyRecordsEl.innerHTML = sortedDates.map(date => {
+                const dayRecords = recordsByDate[date];
+                const formattedDate = formatDate(date);
+                
+                // 计算当日汇总数据
+                const totalCuts = dayRecords.reduce((sum, record) => sum + record.cuts, 0);
+                const totalOvertime = dayRecords.reduce((sum, record) => sum + record.overtime, 0);
+                const circleRecords = dayRecords.filter(r => r.machineType === 'circle');
+                const flatRecords = dayRecords.filter(r => r.machineType === 'flat');
+                
+                // 计算当日目标 - 使用新的算法
+                // 核心原则：圆模切机和平压模切机当日上班时长总和为8小时
+                // 每日目标 = (可用时间 - K * 记录数) * G
+                // 可用时间 = 总可用时间 * (该机器类型工作时长 / 总工作时长)
+                // 总可用时间 = 8 - 总调机时间 - 总备注扣除时间
+                // K值：圆模切机为0.25，平压模切机为0.5
+                // G值：圆模切机为6250，平压模切机为13750
+                const circleK = 0.25;
+                const flatK = 0.5;
+                const circleG = 6250;
+                const flatG = 13750;
+                
+                // 计算总调机时间和总备注扣除时间
+                const totalSetupTime = dayRecords.reduce((sum, record) => sum + ((record.setupTime || 0) / 60), 0);
+                const totalRemarksDeduction = dayRecords.reduce((sum, record) => sum + (record.remarksTimeDeduction || 0), 0);
+                const totalAvailableHours = Math.max(0, 8 - totalSetupTime - totalRemarksDeduction);
+                
+                // 计算各类机器的总工作时长
+                const circleTotalWorkHours = circleRecords.reduce((sum, record) => sum + ((record.workDuration || 0) - ((record.lunchBreakMinutes || 30) / 60)), 0);
+                const flatTotalWorkHours = flatRecords.reduce((sum, record) => sum + ((record.workDuration || 0) - ((record.lunchBreakMinutes || 30) / 60)), 0);
+                const totalWorkHours = circleTotalWorkHours + flatTotalWorkHours;
+                
+                // 计算各类机器的每日目标和实际产能
+                let circleDailyTarget = 0;
+                let flatDailyTarget = 0;
+                
+                if (totalWorkHours > 0) {
+                    // 根据工作时长比例分配可用时间
+                    const circleTimeRatio = circleTotalWorkHours / totalWorkHours;
+                    const flatTimeRatio = flatTotalWorkHours / totalWorkHours;
+                    
+                    const circleAvailableHours = totalAvailableHours * circleTimeRatio;
+                    const flatAvailableHours = totalAvailableHours * flatTimeRatio;
+                    
+                    circleDailyTarget = Math.max(0, (circleAvailableHours - circleK * circleRecords.length)) * circleG;
+                    flatDailyTarget = Math.max(0, (flatAvailableHours - flatK * flatRecords.length)) * flatG;
+                } else {
+                    // 如果没有工作时长记录，平均分配时间
+                    const avgAvailableHours = totalAvailableHours / 2;
+                    circleDailyTarget = Math.max(0, (avgAvailableHours - circleK * circleRecords.length)) * circleG;
+                    flatDailyTarget = Math.max(0, (avgAvailableHours - flatK * flatRecords.length)) * flatG;
+                }
+                const totalTarget = circleDailyTarget + flatDailyTarget;
+                
+                // 计算各类机器的实际产能
+                const circleActualCuts = circleRecords.reduce((sum, record) => sum + record.cuts, 0);
+                const flatActualCuts = flatRecords.reduce((sum, record) => sum + record.cuts, 0);
+                
+                // 计算各类机器的目标差异
+                const circleTargetDifference = circleActualCuts - circleDailyTarget;
+                const flatTargetDifference = flatActualCuts - flatDailyTarget;
+                const totalTargetDifference = totalCuts - totalTarget;
+                
+                return `
+                    <div class="border border-gray-200 rounded-lg overflow-hidden mb-4">
+                        <div class="collapsible-header" data-date="${date}">
+                            <div>
+                                <h3 class="text-base font-medium text-gray-900">${formattedDate}</h3>
+                                <div class="flex items-center mt-1 space-x-3">
+                                    <span class="text-sm text-gray-600">
+                                        <i class="fa fa-cutlery mr-1"></i>
+                                        总刀数: ${formatInteger(totalCuts)}
+                                    </span>
+                                    <span class="text-sm text-gray-600">
+                                        <i class="fa fa-clock-o mr-1"></i>
+                                        加班: ${totalOvertime.toFixed(2)}小时
+                                    </span>
+                                    ${circleRecords.length > 0 ? `
+                                    <span class="text-sm ${circleTargetDifference >= 0 ? 'text-green-600' : 'text-red-600'}">
+                                        <i class="fa fa-circle-o mr-1"></i>
+                                        圆模差异: ${circleTargetDifference >= 0 ? '+' : ''}${formatInteger(circleTargetDifference)}
+                                    </span>
+                                    ` : ''}
+                                    ${flatRecords.length > 0 ? `
+                                    <span class="text-sm ${flatTargetDifference >= 0 ? 'text-green-600' : 'text-red-600'}">
+                                        <i class="fa fa-square-o mr-1"></i>
+                                        平压差异: ${flatTargetDifference >= 0 ? '+' : ''}${formatInteger(flatTargetDifference)}
+                                    </span>
+                                    ` : ''}
+                                    <!-- 总差异显示已取消 -->
+                                </div>
+
+
+                            </div>
+
+
+                            <div class="flex items-center space-x-2">
+                                <button class="text-red-500 hover:text-red-600 delete-day-btn" data-date="${date}" title="删除当日所有记录">
+                                    <i class="fa fa-calendar-times-o"></i>
+                                </button>
+                                <i class="fa fa-chevron-down text-gray-500 transition-transform duration-300"></i>
+                            </div>
+
+
+                        </div>
+
+
+                        <div class="collapsible-content" id="content-${date}">
+                            <div class="space-y-3">
+                                ${dayRecords.map(record => {
+                                    const machineTypeText = record.machineType === 'circle' ? '圆模切机' : '平压模切机';
+                                    const machineTypeClass = record.machineType === 'circle' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800';
+                                    const startTime = new Date(record.startTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+                                    const endTime = new Date(record.endTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+                                    
+                return `
+                    <div class="bg-gray-50 rounded-lg p-3">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h4 class="text-sm font-medium text-gray-900">${record.productName || '未命名产品'}</h4>
+                                <div class="flex items-center mt-1">
+                                    <span class="badge ${machineTypeClass}">${machineTypeText}</span>
+                                    <span class="text-xs text-gray-500 ml-2">${startTime} - ${endTime}</span>
+                                </div>
+
+
+                            </div>
+
+
+                            <div class="flex items-center space-x-2">
+                                <button class="text-blue-500 hover:text-blue-600 edit-record-btn" data-record-id="${record.id}" title="编辑记录">
+                                    <i class="fa fa-pencil"></i>
+                                </button>
+                                <button class="text-red-500 hover:text-red-600 delete-record-btn" data-record-id="${record.id}">
+                                    <i class="fa fa-trash"></i>
+                                </button>
+                            </div>
+
+
+                        </div>
+
+
+                                            
+                                            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
+                                                <div>
+                                                    <p class="text-xs text-gray-500">模切刀数</p>
+                                                    <p class="text-sm">${formatInteger(record.cuts)}</p>
+                                                </div>
+
+
+                                                <div>
+                                                    <p class="text-xs text-gray-500">完成数量</p>
+                                                    <p class="text-sm">${formatInteger(record.cuts * (record.completedPerCut || 1))}</p>
+                                                </div>
+
+
+                                                <div>
+                                                    <p class="text-xs text-gray-500">调机时间</p>
+                                                    <p class="text-sm">${record.setupTime} 分钟</p>
+                                                </div>
+
+
+                                                <div>
+                                                    <p class="text-xs text-gray-500">加班时长</p>
+                                                    <p class="text-sm ${typeof record.overtime === 'number' && record.overtime > 0 ? 'text-secondary' : ''}">
+                                                        ${typeof record.overtime === 'number' && !isNaN(record.overtime) ? record.overtime.toFixed(2) : 0.00} 小时
+                                                    </p>
+                                                </div>
+
+
+                                            </div>
+
+
+                                            
+                                            ${record.remarks ? `<p class="text-xs text-gray-500 mt-2">备注: ${record.remarks}</p>` : ''}
+                                        </div>
+
+
+                                    `;
+                                }).join('')}
+                            </div>
+
+
+                        </div>
+
+
+                    </div>
+
+
+                `;
+            }).join('');
+            
+            // 添加折叠功能
+            document.querySelectorAll('.collapsible-header').forEach(header => {
+                header.addEventListener('click', () => {
+                    const date = header.getAttribute('data-date');
+                    const content = document.getElementById(`content-${date}`);
+                    const icon = header.querySelector('i.fa-chevron-down');
+                    
+                    content.classList.toggle('open');
+                    icon.style.transform = content.classList.contains('open') ? 'rotate(180deg)' : 'rotate(0)';
+                });
+                
+                // 默认展开第一个
+                if (header === document.querySelectorAll('.collapsible-header')[0]) {
+                    const date = header.getAttribute('data-date');
+                    const content = document.getElementById(`content-${date}`);
+                    const icon = header.querySelector('i.fa-chevron-down');
+                    
+                    content.classList.add('open');
+                    icon.style.transform = 'rotate(180deg)';
+                }
+            });
+        }
+        
+        // 更新仪表板
+        function updateDashboard() {
+            const today = new Date().toISOString().split('T')[0];
+            const todayRecords = productionRecords.filter(record => record.date === today);
+            
+            // 圆模切机统计
+            const circleRecords = todayRecords.filter(record => record.machineType === 'circle');
+            const circleCount = circleRecords.length;
+            const circleTotalCuts = circleRecords.reduce((sum, record) => sum + record.cuts, 0);
+            
+            // 平压模切机统计
+            const flatRecords = todayRecords.filter(record => record.machineType === 'flat');
+            const flatCount = flatRecords.length;
+            const flatTotalCuts = flatRecords.reduce((sum, record) => sum + record.cuts, 0);
+            
+            // 计算两种机器的总工作时间和总目标
+            const totalSetupPenalty = settings.circleSetupPenalty * circleCount + settings.flatSetupPenalty * flatCount;
+            const totalAvailableWorkHours = settings.workHours; // 8小时是总工作时间目标
+            const totalTarget = totalAvailableWorkHours * settings.circleHourlyRate + totalAvailableWorkHours * settings.flatHourlyRate;
+            
+            // 计算每种机器的进度百分比（基于总目标）
+            const circleProgress = (circleTotalCuts / totalTarget) * 100;
+            const flatProgress = (flatTotalCuts / totalTarget) * 100;
+            
+            circleMachineCountEl.textContent = circleCount;
+            circleMachineProgressEl.style.width = `${Math.min(circleProgress, 100)}%`;
+            
+            if (circleProgress < 25) {
+                circleMachineProgressEl.className = 'progress-value progress-danger';
+            } else if (circleProgress < 40) {
+                circleMachineProgressEl.className = 'progress-value progress-warning';
+            } else {
+                circleMachineProgressEl.className = 'progress-value progress-success';
+            }
+            
+            flatMachineCountEl.textContent = flatCount;
+            flatMachineProgressEl.style.width = `${Math.min(flatProgress, 100)}%`;
+            
+            if (flatProgress < 25) {
+                flatMachineProgressEl.className = 'progress-value progress-danger';
+            } else if (flatProgress < 40) {
+                flatMachineProgressEl.className = 'progress-value progress-warning';
+            } else {
+                flatMachineProgressEl.className = 'progress-value progress-success';
+            }
+            
+            // 总生产刀数
+            const totalCuts = circleTotalCuts + flatTotalCuts;
+            if (totalCutsEl) {
+                totalCutsEl.textContent = formatInteger(totalCuts);
+            } else {
+                console.warn('total-cuts 元素未找到');
+            }
+            
+            // 总加班时长
+            const totalOvertime = todayRecords.reduce((sum, record) => sum + record.overtime, 0);
+            if (overtimeHoursEl) {
+                overtimeHoursEl.textContent = `${totalOvertime.toFixed(2)}h`;
+            } else {
+                console.warn('overtime-hours 元素未找到');
+            }
+            
+            // 更新移动端概览数据
+            if (circleMachineCountMobileEl) circleMachineCountMobileEl.textContent = circleCount;
+            if (flatMachineCountMobileEl) flatMachineCountMobileEl.textContent = flatCount;
+            if (totalCutsMobileEl) totalCutsMobileEl.textContent = formatInteger(totalCuts);
+            if (overtimeHoursMobileEl) overtimeHoursMobileEl.textContent = `${totalOvertime.toFixed(2)}h`;
+        }
+        
+        // 初始化统计页面
+        function initStatistics() {
+            // 获取最近30天的日期
+            const last30Days = [];
+            for (let i = 29; i >= 0; i--) {
+                const date = new Date();
+                date.setDate(date.getDate() - i);
+                last30Days.push(date.toISOString().split('T')[0]);
+            }
+            
+            // 计算每日平均产量
+            const dailyProduction = {};
+            last30Days.forEach(date => {
+                const dayRecords = productionRecords.filter(record => record.date === date);
+                const totalCuts = dayRecords.reduce((sum, record) => sum + record.cuts, 0);
+                dailyProduction[date] = totalCuts;
+            });
+            
+            const avgProduction = Object.values(dailyProduction).reduce((sum, val) => sum + val, 0) / last30Days.length;
+            avgDailyProductionEl.textContent = formatInteger(avgProduction);
+            
+            // 计算产量变化
+            const recentWeek = last30Days.slice(-7);
+            const previousWeek = last30Days.slice(-14, -7);
+            
+            const recentWeekAvg = recentWeek.reduce((sum, date) => sum + dailyProduction[date], 0) / 7;
+            const previousWeekAvg = previousWeek.reduce((sum, date) => sum + dailyProduction[date], 0) / 7;
+            
+            if (previousWeekAvg > 0) {
+                const productionChange = ((recentWeekAvg - previousWeekAvg) / previousWeekAvg) * 100;
+                avgProductionChangeEl.textContent = `${productionChange >= 0 ? '+' : ''}${productionChange.toFixed(2)}% 较上周`;
+                avgProductionChangeEl.className = `mt-2 text-xs ${productionChange >= 0 ? 'text-green-500' : 'text-red-500'}`;
+            } else {
+                avgProductionChangeEl.textContent = '--';
+                avgProductionChangeEl.className = 'mt-2 text-xs text-gray-500';
+            }
+            
+            // 计算平均调机时间
+            const setupTimes = productionRecords.map(record => record.setupTime);
+            const avgSetupTime = setupTimes.reduce((sum, time) => sum + time, 0) / setupTimes.length;
+            avgSetupTimeEl.textContent = Math.round(avgSetupTime);
+            
+            // 计算调机时间变化
+            const recentSetupTimes = productionRecords
+                .filter(record => last30Days.slice(-7).includes(record.date))
+                .map(record => record.setupTime);
+            
+            const previousSetupTimes = productionRecords
+                .filter(record => last30Days.slice(-14, -7).includes(record.date))
+                .map(record => record.setupTime);
+            
+            if (previousSetupTimes.length > 0) {
+                const recentAvgSetup = recentSetupTimes.reduce((sum, time) => sum + time, 0) / recentSetupTimes.length;
+                const previousAvgSetup = previousSetupTimes.reduce((sum, time) => sum + time, 0) / previousSetupTimes.length;
+                
+                const setupChange = ((recentAvgSetup - previousAvgSetup) / previousAvgSetup) * 100;
+                avgSetupChangeEl.textContent = `${setupChange >= 0 ? '+' : ''}${setupChange.toFixed(2)}% 较上周`;
+                avgSetupChangeEl.className = `mt-2 text-xs ${setupChange <= 0 ? 'text-green-500' : 'text-red-500'}`;
+            } else {
+                avgSetupChangeEl.textContent = '--';
+                avgSetupChangeEl.className = 'mt-2 text-xs text-gray-500';
+            }
+            
+            // 计算平均加班时长
+            const overtimeHours = productionRecords.map(record => record.overtime);
+            const avgOvertime = overtimeHours.reduce((sum, hours) => sum + hours, 0) / overtimeHours.length;
+            avgOvertimeEl.textContent = avgOvertime.toFixed(1);
+            
+            // 计算加班时长变化
+            const recentOvertime = productionRecords
+                .filter(record => last30Days.slice(-7).includes(record.date))
+                .map(record => record.overtime);
+            
+            const previousOvertime = productionRecords
+                .filter(record => last30Days.slice(-14, -7).includes(record.date))
+                .map(record => record.overtime);
+            
+            if (previousOvertime.length > 0) {
+                const recentAvgOvertime = recentOvertime.reduce((sum, hours) => sum + hours, 0) / recentOvertime.length;
+                const previousAvgOvertime = previousOvertime.reduce((sum, hours) => sum + hours, 0) / previousOvertime.length;
+                
+                const overtimeChange = ((recentAvgOvertime - previousAvgOvertime) / previousAvgOvertime) * 100;
+                avgOvertimeChangeEl.textContent = `${overtimeChange >= 0 ? '+' : ''}${overtimeChange.toFixed(2)}% 较上周`;
+                avgOvertimeChangeEl.className = `mt-2 text-xs ${overtimeChange <= 0 ? 'text-green-500' : 'text-red-500'}`;
+            } else {
+                avgOvertimeChangeEl.textContent = '--';
+                avgOvertimeChangeEl.className = 'mt-2 text-xs text-gray-500';
+            }
+            
+            // 渲染效率排行
+            renderEfficiencyRanking();
+        }
+        
+        // 渲染效率排行
+        function renderEfficiencyRanking() {
+            // 按产品和机器类型分组
+            const productGroups = {};
+            
+            productionRecords.forEach(record => {
+                const key = `${record.productName}-${record.machineType}`;
+                if (!productGroups[key]) {
+                    productGroups[key] = {
+                        productName: record.productName,
+                        machineType: record.machineType,
+                        totalCuts: 0,
+                        totalTime: 0,
+                        totalCompleted: 0,
+                        count: 0
+                    };
+                }
+                
+                productGroups[key].totalCuts += record.cuts;
+                productGroups[key].totalTime += record.effectiveWorkTime;
+                productGroups[key].totalCompleted += record.cuts * (record.completedPerCut || 1);
+                productGroups[key].count += 1;
+            });
+            
+            // 计算效率
+            const efficiencyData = Object.values(productGroups).map(group => {
+                const hourlyRate = group.totalTime > 0 ? group.totalCuts / group.totalTime : 0;
+                const completionRate = group.totalCuts > 0 ? (group.totalCompleted / group.totalCuts) * 100 : 0;
+                
+                return {
+                    ...group,
+                    hourlyRate,
+                    completionRate
+                };
+            });
+            
+            // 按小时产能排序
+            efficiencyData.sort((a, b) => b.hourlyRate - a.hourlyRate);
+            
+            if (efficiencyData.length === 0) {
+                efficiencyRankingEl.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="table-cell text-center text-gray-500">暂无数据</td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            efficiencyRankingEl.innerHTML = efficiencyData.slice(0, 10).map(item => {
+                const machineTypeText = item.machineType === 'circle' ? '圆模切机' : '平压模切机';
+                const machineTypeClass = item.machineType === 'circle' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800';
+                
+                return `
+                    <tr class="hover:bg-gray-50">
+                        <td class="table-cell font-medium">${item.productName}</td>
+                        <td class="table-cell">
+                            <span class="badge ${machineTypeClass}">${machineTypeText}</span>
+                        </td>
+                        <td class="table-cell">${formatInteger(item.hourlyRate)}</td>
+                        <td class="table-cell">
+                            <div class="flex items-center">
+                                <span class="mr-2">${item.completionRate.toFixed(2)}%</span>
+                                <div class="w-16 progress-bar">
+                                    <div class="progress-value progress-success" style="width: ${Math.min(item.completionRate, 100)}%"></div>
+                                </div>
+
+
+                            </div>
+
+
+                        </td>
+                        <td class="table-cell">${item.count}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        
+        // 初始化图表
+        function initCharts() {
+            // 每日生产趋势图
+            const dailyProductionCtx = document.getElementById('daily-production-chart').getContext('2d');
+            
+            // 获取最近30天的日期
+            const last30Days = [];
+            for (let i = 29; i >= 0; i--) {
+                const date = new Date();
+                date.setDate(date.getDate() - i);
+                last30Days.push(date.toISOString().split('T')[0]);
+            }
+            
+            // 准备数据
+            const dailyData = {
+                dates: last30Days.map(date => formatDateShort(date)),
+                circle: [],
+                flat: [],
+                total: []
+            };
+            
+            last30Days.forEach(date => {
+                const dayRecords = productionRecords.filter(record => record.date === date);
+                const circleCuts = dayRecords
+                    .filter(record => record.machineType === 'circle')
+                    .reduce((sum, record) => sum + record.cuts, 0);
+                
+                const flatCuts = dayRecords
+                    .filter(record => record.machineType === 'flat')
+                    .reduce((sum, record) => sum + record.cuts, 0);
+                
+                dailyData.circle.push(circleCuts);
+                dailyData.flat.push(flatCuts);
+                dailyData.total.push(circleCuts + flatCuts);
+            });
+            
+            // 创建图表
+            if (window.dailyProductionChart) {
+                window.dailyProductionChart.destroy();
+            }
+            
+            window.dailyProductionChart = new Chart(dailyProductionCtx, {
+                type: 'bar',
+                data: {
+                    labels: dailyData.dates,
+                    datasets: [
+                        {
+                            label: '圆模切机',
+                            data: dailyData.circle,
+                            backgroundColor: 'rgba(30, 64, 175, 0.7)',
+                            borderColor: 'rgba(30, 64, 175, 1)',
+                            borderWidth: 1
+                        },
+                        {
+                            label: '平压模切机',
+                            data: dailyData.flat,
+                            backgroundColor: 'rgba(147, 51, 234, 0.7)',
+                            borderColor: 'rgba(147, 51, 234, 1)',
+                            borderWidth: 1
+                        },
+                        {
+                            label: '总计',
+                            data: dailyData.total,
+                            type: 'line',
+                            fill: false,
+                            backgroundColor: 'rgba(249, 115, 22, 1)',
+                            borderColor: 'rgba(249, 115, 22, 1)',
+                            borderWidth: 2,
+                            tension: 0.3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return value.toLocaleString();
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // 机器生产对比图
+            const machineComparisonCtx = document.getElementById('machine-comparison-chart').getContext('2d');
+            
+            // 按周分组数据
+            const weeklyData = {
+                labels: [],
+                circle: [],
+                flat: []
+            };
+            
+            // 获取最近8周
+            for (let i = 7; i >= 0; i--) {
+                const weekStart = new Date();
+                weekStart.setDate(weekStart.getDate() - (weekStart.getDay() + i * 7));
+                const weekEnd = new Date(weekStart);
+                weekEnd.setDate(weekEnd.getDate() + 6);
+                
+                const weekLabel = `${formatDateShort(weekStart)} - ${formatDateShort(weekEnd)}`;
+                weeklyData.labels.push(weekLabel);
+                
+                const weekStartStr = weekStart.toISOString().split('T')[0];
+                const weekEndStr = weekEnd.toISOString().split('T')[0];
+                
+                const weekRecords = productionRecords.filter(record => {
+                    return record.date >= weekStartStr && record.date <= weekEndStr;
+                });
+                
+                const circleCuts = weekRecords
+                    .filter(record => record.machineType === 'circle')
+                    .reduce((sum, record) => sum + record.cuts, 0);
+                
+                const flatCuts = weekRecords
+                    .filter(record => record.machineType === 'flat')
+                    .reduce((sum, record) => sum + record.cuts, 0);
+                
+                weeklyData.circle.push(circleCuts);
+                weeklyData.flat.push(flatCuts);
+            }
+            
+            // 创建图表
+            if (window.machineComparisonChart) {
+                window.machineComparisonChart.destroy();
+            }
+            
+            window.machineComparisonChart = new Chart(machineComparisonCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['圆模切机', '平压模切机'],
+                    datasets: [{
+                        data: [
+                            productionRecords
+                                .filter(record => record.machineType === 'circle')
+                                .reduce((sum, record) => sum + record.cuts, 0),
+                            productionRecords
+                                .filter(record => record.machineType === 'flat')
+                                .reduce((sum, record) => sum + record.cuts, 0)
+                        ],
+                        backgroundColor: [
+                            'rgba(30, 64, 175, 0.7)',
+                            'rgba(147, 51, 234, 0.7)'
+                        ],
+                        borderColor: [
+                            'rgba(30, 64, 175, 1)',
+                            'rgba(147, 51, 234, 1)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw || 0;
+                                    const total = context.dataset.data.reduce((sum, val) => sum + val, 0);
+                                    const percentage = total > 0 ? ((value / total) * 100).toFixed(2) : 0;
+                                    return `${label}: ${value.toLocaleString()} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 加载设置
+        function loadSettings() {
+            document.getElementById('circle-daily-target').value = settings.circleDailyTarget;
+            document.getElementById('flat-daily-target').value = settings.flatDailyTarget;
+            document.getElementById('work-hours').value = settings.workHours;
+            document.getElementById('lunch-break').value = settings.lunchBreak;
+            document.getElementById('circle-hourly-rate').value = settings.circleHourlyRate;
+            document.getElementById('flat-hourly-rate').value = settings.flatHourlyRate;
+            document.getElementById('circle-setup-penalty').value = settings.circleSetupPenalty;
+            document.getElementById('flat-setup-penalty').value = settings.flatSetupPenalty;
+        }
+        
+        // 保存设置
+        function saveSettings() {
+            const formData = new FormData(settingsForm);
+            
+            settings = {
+                circleDailyTarget: parseInt(formData.get('circleDailyTarget')),
+                flatDailyTarget: parseInt(formData.get('flatDailyTarget')),
+                workHours: parseFloat(formData.get('workHours')),
+                lunchBreak: parseInt(formData.get('lunchBreak')),
+                circleHourlyRate: parseInt(formData.get('circleHourlyRate')),
+                flatHourlyRate: parseInt(formData.get('flatHourlyRate')),
+                circleSetupPenalty: parseFloat(formData.get('circleSetupPenalty')),
+                flatSetupPenalty: parseFloat(formData.get('flatSetupPenalty'))
+            };
+            
+            localStorage.setItem('settings', JSON.stringify(settings));
+            
+            settingsModal.classList.add('hidden');
+            showNotification('成功', '设置已保存', 'success');
+            
+            // 更新显示
+            renderTodayRecords();
+            renderHistoryRecords();
+            updateDashboard();
+            initStatistics();
+        }
+        
+        // 确认删除所有记录
+        function confirmDeleteAllRecords() {
+            const recordCount = productionRecords.length;
+            if (recordCount === 0) {
+                showNotification('提示', '没有记录可以删除', 'info');
+                return;
+            }
+            
+            deleteMode = 'all';
+            recordsToDelete = [...productionRecords];
+            
+            // 更新删除模态框内容
+            const deleteModalContent = deleteModal.querySelector('div.px-6.py-4');
+            deleteModalContent.innerHTML = `
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">确认删除所有记录</h3>
+                <p class="text-gray-600 mb-2">您确定要删除所有生产记录吗？此操作无法撤销。</p>
+                <p class="text-sm text-red-600">将删除 ${recordCount} 条记录</p>
+            `;
+            
+            deleteModal.classList.remove('hidden');
+        }
+
+        // 确认删除今日记录
+        function confirmDeleteTodayRecords() {
+            const today = new Date();
+            const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+            
+            const todayRecords = productionRecords.filter(record => record.date === todayStr);
+            const recordCount = todayRecords.length;
+            
+            if (recordCount === 0) {
+                showNotification('提示', '今日没有记录可以删除', 'info');
+                return;
+            }
+            
+            deleteMode = 'today';
+            recordsToDelete = todayRecords;
+            
+            // 更新删除模态框内容
+            const deleteModalContent = deleteModal.querySelector('div.px-6.py-4');
+            deleteModalContent.innerHTML = `
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">确认删除今日记录</h3>
+                <p class="text-gray-600 mb-2">您确定要删除今日(${todayStr})的所有生产记录吗？此操作无法撤销。</p>
+                <p class="text-sm text-red-600">将删除 ${recordCount} 条今日记录</p>
+            `;
+            
+            deleteModal.classList.remove('hidden');
+        }
+
+        // 确认删除指定日期记录
+        function confirmDeleteDayRecords(date) {
+            const dayRecords = productionRecords.filter(record => record.date === date);
+            const recordCount = dayRecords.length;
+            
+            if (recordCount === 0) {
+                showNotification('提示', '该日期没有记录可以删除', 'info');
+                return;
+            }
+            
+            deleteMode = 'day';
+            recordsToDelete = dayRecords;
+            
+            const formattedDate = formatDate(date);
+            
+            // 更新删除模态框内容
+            const deleteModalContent = deleteModal.querySelector('div.px-6.py-4');
+            deleteModalContent.innerHTML = `
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">确认删除当日记录</h3>
+                <p class="text-gray-600 mb-2">您确定要删除${formattedDate}的所有生产记录吗？此操作无法撤销。</p>
+                <p class="text-sm text-red-600">将删除 ${recordCount} 条记录</p>
+            `;
+            
+            deleteModal.classList.remove('hidden');
+        }
+
+        // 确认删除本月记录
+        function confirmDeleteMonthRecords() {
+            const today = new Date();
+            const currentYear = today.getFullYear();
+            const currentMonth = today.getMonth();
+            const monthStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+            
+            const monthRecords = productionRecords.filter(record => record.date && record.date.startsWith(monthStr));
+            const recordCount = monthRecords.length;
+            
+            if (recordCount === 0) {
+                showNotification('提示', '本月没有记录可以删除', 'info');
+                return;
+            }
+            
+            deleteMode = 'month';
+            recordsToDelete = monthRecords;
+            
+            // 更新删除模态框内容
+            const deleteModalContent = deleteModal.querySelector('div.px-6.py-4');
+            deleteModalContent.innerHTML = `
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">确认删除本月记录</h3>
+                <p class="text-gray-600 mb-2">您确定要删除本月(${monthStr})的所有生产记录吗？此操作无法撤销。</p>
+                <p class="text-sm text-red-600">将删除 ${recordCount} 条本月记录</p>
+            `;
+            
+            deleteModal.classList.remove('hidden');
+        }
+
+        // 关闭删除模态框
+        function closeDeleteModal() {
+            deleteModal.classList.add('hidden');
+            deleteMode = null;
+            recordsToDelete = [];
+        }
+
+        // 执行删除操作
+        function executeDelete() {
+            if (!deleteMode || recordsToDelete.length === 0) {
+                closeDeleteModal();
+                return;
+            }
+            
+            console.log(`执行删除操作: ${deleteMode}, 记录数: ${recordsToDelete.length}`);
+            
+            // 获取要删除的记录ID列表
+            const recordIdsToDelete = recordsToDelete.map(record => record.id);
+            
+            // 从主记录数组中过滤掉要删除的记录
+            const originalLength = productionRecords.length;
+            productionRecords = productionRecords.filter(record => !recordIdsToDelete.includes(record.id));
+            const deletedCount = originalLength - productionRecords.length;
+            
+            console.log(`删除前记录数: ${originalLength}, 删除后记录数: ${productionRecords.length}, 实际删除: ${deletedCount}`);
+            
+            // 保存更新后的记录
+            saveRecords();
+            
+            // 显示成功通知
+            let message = '';
+            switch (deleteMode) {
+                case 'all':
+                    message = `已成功删除所有 ${deletedCount} 条记录`;
+                    break;
+                case 'today':
+                    message = `已成功删除今日 ${deletedCount} 条记录`;
+                    break;
+                case 'day':
+                    message = `已成功删除指定日期 ${deletedCount} 条记录`;
+                    break;
+                case 'month':
+                    message = `已成功删除本月 ${deletedCount} 条记录`;
+                    break;
+                default:
+                    message = `已成功删除 ${deletedCount} 条记录`;
+            }
+            
+            showNotification('成功', message, 'success');
+            
+            // 关闭模态框
+            closeDeleteModal();
+            
+            // 更新显示
+            renderTodayRecords();
+            renderHistoryRecords();
+            updateDashboard();
+            initStatistics();
+        }
+
+        // 重置设置
+        function resetSettings() {
+            settings = {
+                circleDailyTarget: 50000,
+                flatDailyTarget: 110000,
+                workHours: 8,
+                lunchBreak: 30,
+                circleHourlyRate: 6250,
+                flatHourlyRate: 13750,
+                circleSetupPenalty: 0.25,
+                flatSetupPenalty: 0.5
+            };
+            
+            loadSettings();
+            showNotification('提示', '已恢复默认设置', 'info');
+        }
+        
+        // 确认删除记录
+        function confirmDeleteRecord(id) {
+            recordToDelete = id;
+            
+            // 更新删除模态框内容
+            const deleteModalContent = deleteModal.querySelector('div.px-6.py-4');
+            deleteModalContent.innerHTML = `
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">确认删除</h3>
+                <p class="text-gray-600">您确定要删除这条生产记录吗？此操作无法撤销。</p>
+            `;
+            
+            deleteModal.classList.remove('hidden');
+        }
+        
+        // 删除记录
+        function deleteRecord() {
+            if (!recordToDelete) return;
+            
+            console.log('准备删除记录，ID:', recordToDelete);
+            console.log('删除前记录总数:', productionRecords.length);
+            
+            // 确保正确过滤，只删除匹配的记录
+            const originalLength = productionRecords.length;
+            productionRecords = productionRecords.filter(record => {
+                const shouldKeep = record.id !== recordToDelete;
+                if (!shouldKeep) {
+                    console.log('找到要删除的记录:', record.id, record.productName);
+                }
+                return shouldKeep;
+            });
+            
+            const deletedCount = originalLength - productionRecords.length;
+            console.log('删除后记录总数:', productionRecords.length, '删除了', deletedCount, '条记录');
+            
+            if (deletedCount === 0) {
+                console.error('未找到要删除的记录，ID:', recordToDelete);
+                showNotification('错误', '未找到要删除的记录', 'error');
+            } else {
+                saveRecords();
+                showNotification('成功', '生产记录已删除', 'success');
+            }
+            
+            deleteModal.classList.add('hidden');
+            recordToDelete = null;
+            
+            // 更新显示
+            renderTodayRecords();
+            renderHistoryRecords();
+            updateDashboard();
+            initStatistics();
+        }
+        
+        // 保存记录到本地存储
+        function saveRecords() {
+            try {
+                console.log('开始保存记录，当前记录数量:', productionRecords.length);
+                
+                // 验证记录数组的有效性
+                if (!Array.isArray(productionRecords)) {
+                    console.error('生产记录数组无效:', productionRecords);
+                    showNotification('错误', '数据格式错误，保存失败', 'error');
+                    return false;
+                }
+                
+                // 验证并修复记录数据
+                const validRecords = [];
+                let hasInvalidRecords = false;
+                
+                for (let i = 0; i < productionRecords.length; i++) {
+                    const record = productionRecords[i];
+                    
+                    // 跳过完全无效的记录
+                    if (!record || typeof record !== 'object') {
+                        console.warn(`跳过第${i}条无效记录`);
+                        hasInvalidRecords = true;
+                        continue;
+                    }
+                    
+                    // 创建记录的副本，避免直接修改原对象
+                    const validRecord = { ...record };
+                    
+                    // 确保关键字段存在且有效
+                    if (!validRecord.id) {
+                        validRecord.id = Date.now() + '_' + i;
+                        console.warn(`为第${i}条记录生成新ID`);
+                    }
+                    
+                    if (!validRecord.productName || validRecord.productName.trim() === '') {
+                        validRecord.productName = '未命名产品';
+                        console.warn(`为第${i}条记录设置默认产品名称`);
+                    }
+                    
+                    // 确保日期字段正确
+                    if (!validRecord.date || !isValidDate(validRecord.date)) {
+                        if (validRecord.startTime && isValidDate(validRecord.startTime)) {
+                            validRecord.date = new Date(validRecord.startTime).toISOString().split('T')[0];
+                            console.warn(`从startTime为第${i}条记录生成日期`);
+                        } else {
+                            validRecord.date = new Date().toISOString().split('T')[0];
+                            console.warn(`为第${i}条记录设置当前日期`);
+                        }
+                    }
+                    
+                    // 确保时间字段有效
+                    if (!validRecord.startTime || !isValidDate(validRecord.startTime)) {
+                        validRecord.startTime = new Date().toISOString();
+                        console.warn(`为第${i}条记录设置当前开始时间`);
+                    }
+                    
+                    if (!validRecord.endTime || !isValidDate(validRecord.endTime)) {
+                        validRecord.endTime = new Date().toISOString();
+                        console.warn(`为第${i}条记录设置当前结束时间`);
+                    }
+                    
+                    // 确保数字字段有效
+                    validRecord.cuts = Number(validRecord.cuts) || 0;
+                    validRecord.completedPerCut = Number(validRecord.completedPerCut) || 1;
+                    validRecord.setupTime = Number(validRecord.setupTime) || 0;
+                    validRecord.overtime = Number(validRecord.overtime) || 0;
+                    
+                    validRecords.push(validRecord);
+                }
+                
+                // 如果有无效记录被修复，显示提示
+                if (hasInvalidRecords) {
+                    console.log(`修复了${productionRecords.length - validRecords.length}条无效记录`);
+                }
+                
+                // 如果没有有效记录，提示用户
+                if (validRecords.length === 0) {
+                    console.error('没有有效的记录可保存');
+                    showNotification('错误', '没有有效的记录可保存', 'error');
+                    return false;
+                }
+                
+                console.log('准备保存', validRecords.length, '条有效记录');
+                
+                // 尝试保存到localStorage
+                try {
+                    const recordsJson = JSON.stringify(validRecords);
+                    const dataSize = new Blob([recordsJson]).size;
+                    console.log(`JSON数据大小: ${Math.round(dataSize / 1024)} KB`);
+                    
+                    // 检查localStorage可用空间
+                    if (dataSize > 5 * 1024 * 1024) { // 5MB限制
+                        console.warn('数据过大，尝试清理旧记录');
+                        // 只保留最近的200条记录
+                        const recentRecords = validRecords.slice(-200);
+                        const recentJson = JSON.stringify(recentRecords);
+                        localStorage.setItem('productionRecords', recentJson);
+                        console.log(`已清理旧数据，保留最近${recentRecords.length}条记录`);
+                        showNotification('警告', '数据量过大，已清理部分旧记录', 'warning');
+                    } else {
+                        localStorage.setItem('productionRecords', recordsJson);
+                    }
+                    
+                    console.log('记录保存成功！');
+                    
+                    // 更新内存中的记录数组
+                    productionRecords = validRecords;
+                    
+                    return true;
+                } catch (storageError) {
+                    console.error('localStorage保存失败:', storageError);
+                    
+                    // 处理存储空间不足的情况
+                    if (storageError.name === 'QuotaExceededError' || storageError.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+                        console.warn('存储空间不足，尝试清理旧数据...');
+                        
+                        // 清理其他可能的缓存数据
+                        try {
+                            localStorage.removeItem('statisticsData');
+                            localStorage.removeItem('tempData');
+                            console.log('已清理缓存数据');
+                        } catch (e) {
+                            console.error('清理缓存失败:', e);
+                        }
+                        
+                        // 只保留最近的100条记录
+                        const recentRecords = validRecords.slice(-100);
+                        const recentJson = JSON.stringify(recentRecords);
+                        
+                        try {
+                            localStorage.setItem('productionRecords', recentJson);
+                            productionRecords = recentRecords;
+                            console.log(`已清理旧数据，保留最近${recentRecords.length}条记录`);
+                            showNotification('警告', '存储空间不足，已清理部分旧记录', 'warning');
+                            return true;
+                        } catch (e) {
+                            console.error('清理后仍无法保存:', e);
+                            showNotification('错误', '存储空间严重不足，请清理浏览器数据', 'error');
+                            return false;
+                        }
+                    }
+                    
+                    // 处理其他存储错误
+                    showNotification('错误', '保存失败，请检查浏览器存储权限', 'error');
+                    return false;
+                }
+            } catch (error) {
+                console.error('保存记录过程中发生未知错误:', error);
+                showNotification('错误', '保存过程中发生错误', 'error');
+                return false;
+            }
+        }
+        
+        // 辅助函数：验证日期是否有效
+        function isValidDate(dateString) {
+            if (!dateString) return false;
+            const date = new Date(dateString);
+            return !isNaN(date.getTime());
+        }
+        
+        // 显示通知
+        function showNotification(title, message, type = 'info') {
+            notificationTitle.textContent = title;
+            notificationMessage.textContent = message;
+            
+            // 设置图标和颜色
+            if (type === 'success') {
+                notificationIcon.className = 'fa fa-check-circle text-green-500 text-xl';
+                notification.classList.remove('border-red-500', 'border-yellow-500');
+                notification.classList.add('border-green-500');
+            } else if (type === 'error') {
+                notificationIcon.className = 'fa fa-exclamation-circle text-red-500 text-xl';
+                notification.classList.remove('border-green-500', 'border-yellow-500');
+                notification.classList.add('border-red-500');
+            } else if (type === 'warning') {
+                notificationIcon.className = 'fa fa-exclamation-triangle text-yellow-500 text-xl';
+                notification.classList.remove('border-green-500', 'border-red-500');
+                notification.classList.add('border-yellow-500');
+            } else {
+                notificationIcon.className = 'fa fa-info-circle text-blue-500 text-xl';
+                notification.classList.remove('border-green-500', 'border-red-500', 'border-yellow-500');
+                notification.classList.add('border-blue-500');
+            }
+            
+            // 显示通知
+            notification.classList.remove('translate-x-full');
+            notification.classList.add('translate-x-0');
+            
+            // 3秒后自动隐藏
+            setTimeout(() => {
+                notification.classList.remove('translate-x-0');
+                notification.classList.add('translate-x-full');
+            }, 3000);
+        }
+        
+        // 计算每日目标
+        function calculateDailyTarget(machineType, recordCount) {
+            // 8小时是两种机器总工作时间的目标
+            // 根据机器类型和调机次数计算该机器的目标刀数
+            if (machineType === 'circle') {
+                return (settings.workHours - settings.circleSetupPenalty * recordCount) * settings.circleHourlyRate;
+            } else {
+                return (settings.workHours - settings.flatSetupPenalty * recordCount) * settings.flatHourlyRate;
+            }
+        }
+        
+        // 格式化日期
+        function formatDate(dateString) {
+            if (!dateString) {
+                return '日期无效';
+            }
+            
+            const date = new Date(dateString);
+            
+            // 检查日期是否有效
+            if (isNaN(date.getTime())) {
+                return '日期无效';
+            }
+            
+            return date.toLocaleDateString('zh-CN', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                weekday: 'long'
+            });
+        }
+        
+        // 格式化日期（短）
+        function formatDateShort(dateString) {
+            if (!dateString) {
+                return '无效';
+            }
+            
+            const date = new Date(dateString);
+            
+            // 检查日期是否有效
+            if (isNaN(date.getTime())) {
+                return '无效';
+            }
+            
+            return date.toLocaleDateString('zh-CN', {
+                month: '2-digit',
+                day: '2-digit'
+            });
+        }
+        
+        // 导出记录功能
+        function exportRecords() {
+            try {
+                const exportData = {
+                    records: productionRecords,
+                    settings: settings,
+                    recordCounter: parseInt(localStorage.getItem('recordCounter')) || 0,
+                    exportDate: new Date().toISOString(),
+                    version: '1.0'
+                };
+                
+                const dataStr = JSON.stringify(exportData, null, 2);
+                const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(dataBlob);
+                
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `die_cutting_records_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                
+                showNotification('成功', '记录导出成功', 'success');
+                console.log('记录导出成功，共', productionRecords.length, '条记录');
+            } catch (error) {
+                console.error('导出记录时发生错误:', error);
+                showNotification('错误', '导出记录失败', 'error');
+            }
+        }
+        
+        // 导入记录功能
+        function importRecords(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                
+                reader.onload = (e) => {
+                    try {
+                        const importData = JSON.parse(e.target.result);
+                        
+                        // 验证导入数据格式
+                        if (!importData.records || !Array.isArray(importData.records)) {
+                            throw new Error('导入文件格式不正确：缺少有效的记录数据');
+                        }
+                        
+                        // 验证记录数据
+                        const validRecords = importData.records.filter(record => {
+                            return record && typeof record === 'object' && 
+                                   record.machineType && record.productName && 
+                                   record.startTime && record.endTime;
+                        });
+                        
+                        if (validRecords.length === 0) {
+                            throw new Error('导入文件中没有有效的记录数据');
+                        }
+                        
+                        // 处理记录编号冲突
+                        let currentCounter = parseInt(localStorage.getItem('recordCounter')) || 0;
+                        validRecords.forEach(record => {
+                            if (!record.recordNumber || record.recordNumber <= currentCounter) {
+                                record.recordNumber = ++currentCounter;
+                            } else if (record.recordNumber > currentCounter) {
+                                currentCounter = record.recordNumber;
+                            }
+                        });
+                        
+                        // 合并记录（避免重复）
+                        const existingIds = new Set(productionRecords.map(r => r.id));
+                        const newRecords = validRecords.filter(r => !existingIds.has(r.id));
+                        
+                        productionRecords.push(...newRecords);
+                        
+                        // 更新记录计数器
+                        localStorage.setItem('recordCounter', currentCounter.toString());
+                        
+                        // 保存合并后的记录
+                        const saveResult = saveRecords();
+                        
+                        if (saveResult) {
+                            // 如果有设置数据，也导入设置
+                            if (importData.settings && typeof importData.settings === 'object') {
+                                settings = { ...settings, ...importData.settings };
+                                localStorage.setItem('settings', JSON.stringify(settings));
+                            }
+                            
+                            resolve({
+                                success: true,
+                                imported: newRecords.length,
+                                total: productionRecords.length
+                            });
+                        } else {
+                            throw new Error('保存导入的记录失败');
+                        }
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+                
+                reader.onerror = () => {
+                    reject(new Error('读取文件失败'));
+                };
+                
+                reader.readAsText(file);
+            });
+        }
+        
+        // 初始化应用
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

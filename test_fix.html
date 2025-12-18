@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试修复结果</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        .test-result {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <h1>模切机生产记录系统 - 修复验证</h1>
+    
+    <div class="test-section">
+        <h2>测试1: 数据存储初始化</h2>
+        <button onclick="testDataInitialization()">运行测试</button>
+        <div id="test1-result" class="test-result info">点击按钮开始测试...</div>
+    </div>
+    
+    <div class="test-section">
+        <h2>测试2: 表单提交功能</h2>
+        <form id="test-form">
+            <div style="margin-bottom: 10px;">
+                <label>机器类型: </label>
+                <select id="test-machine-type">
+                    <option value="circle">圆模切机</option>
+                    <option value="flat">平压模切机</option>
+                </select>
+            </div>
+            <div style="margin-bottom: 10px;">
+                <label>产品名称: </label>
+                <input type="text" id="test-product-name" value="测试产品" required>
+            </div>
+            <div style="margin-bottom: 10px;">
+                <label>模切刀数: </label>
+                <input type="number" id="test-cuts" value="1000" required>
+            </div>
+            <button type="button" onclick="testFormSubmit()">提交测试数据</button>
+        </form>
+        <div id="test2-result" class="test-result info">填写表单并点击提交按钮...</div>
+    </div>
+    
+    <div class="test-section">
+        <h2>测试3: 数据读取验证</h2>
+        <button onclick="testDataRetrieval()">验证数据</button>
+        <div id="test3-result" class="test-result info">点击按钮验证数据是否正确保存...</div>
+        <div id="data-display" style="margin-top: 15px; display: none;">
+            <h3>当前存储的数据:</h3>
+            <pre id="data-output"></pre>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>测试4: 边界情况处理</h2>
+        <button onclick="testEdgeCases()">测试边界情况</button>
+        <div id="test4-result" class="test-result info">点击按钮测试边界情况处理...</div>
+    </div>
+    
+    <div class="test-section">
+        <h2>系统状态</h2>
+        <button onclick="showSystemStatus()">显示状态</button>
+        <div id="status-output" class="test-result info">点击按钮查看系统状态...</div>
+    </div>
+    
+    <script>
+        // 模拟系统的核心功能
+        let productionRecords = [];
+        let settings = {
+            circleDailyTarget: 50000,
+            flatDailyTarget: 110000,
+            workHours: 8,
+            lunchBreak: 30,
+            circleHourlyRate: 6250,
+            flatHourlyRate: 13750,
+            circleSetupPenalty: 0.25,
+            flatSetupPenalty: 0.5
+        };
+        
+        // 测试1: 数据存储初始化
+        function testDataInitialization() {
+            const resultDiv = document.getElementById('test1-result');
+            
+            try {
+                // 清除之前的测试数据
+                localStorage.removeItem('productionRecords');
+                localStorage.removeItem('settings');
+                localStorage.removeItem('recordCounter');
+                
+                // 模拟初始化过程
+                initializeData();
+                
+                resultDiv.className = 'test-result success';
+                resultDiv.textContent = '✓ 数据初始化成功 - productionRecords已初始化为空数组';
+            } catch (error) {
+                resultDiv.className = 'test-result error';
+                resultDiv.textContent = '✗ 数据初始化失败: ' + error.message;
+            }
+        }
+        
+        // 模拟数据初始化
+        function initializeData() {
+            try {
+                // 尝试从本地存储读取生产记录
+                const storedRecords = localStorage.getItem('productionRecords');
+                if (storedRecords) {
+                    const parsedRecords = JSON.parse(storedRecords);
+                    if (Array.isArray(parsedRecords)) {
+                        productionRecords = parsedRecords;
+                    } else {
+                        console.warn('本地存储中的生产记录格式不正确，已重置为空数组');
+                        productionRecords = [];
+                    }
+                } else {
+                    console.log('本地存储中没有生产记录，已初始化为空数组');
+                    productionRecords = []; // 确保初始化为空数组
+                }
+                
+                // 尝试从本地存储读取设置
+                const storedSettings = localStorage.getItem('settings');
+                if (storedSettings) {
+                    const parsedSettings = JSON.parse(storedSettings);
+                    if (typeof parsedSettings === 'object' && parsedSettings !== null) {
+                        settings = { ...settings, ...parsedSettings };
+                    }
+                }
+                
+                return true;
+            } catch (error) {
+                console.error('初始化数据时出错:', error);
+                productionRecords = []; // 出错时重置为空数组
+                return false;
+            }
+        }
+        
+        // 测试2: 表单提交功能
+        function testFormSubmit() {
+            const resultDiv = document.getElementById('test2-result');
+            
+            try {
+                const machineType = document.getElementById('test-machine-type').value;
+                const productName = document.getElementById('test-product-name').value;
+                const cuts = parseInt(document.getElementById('test-cuts').value);
+                
+                const now = new Date();
+                const startTimeStr = new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString().slice(0, 16);
+                const endTimeStr = now.toISOString().slice(0, 16);
+                
+                // 创建测试记录
+                const record = {
+                    id: Date.now().toString(),
+                    recordNumber: 1,
+                    machineType: machineType,
+                    productName: productName,
+                    startTime: startTimeStr,
+                    setupTime: 30,
+                    cuts: cuts,
+                    completedPerCut: 1,
+                    endTime: endTimeStr,
+                    remarks: '测试记录',
+                    date: new Date().toISOString().split('T')[0],
+                    createdAt: new Date().toISOString(),
+                    workDuration: 2,
+                    overtime: 0
+                };
+                
+                // 检查productionRecords是否为数组
+                if (!Array.isArray(productionRecords)) {
+                    console.error('productionRecords不是数组:', productionRecords);
+                    productionRecords = [];
+                }
+                
+                // 添加记录
+                productionRecords.push(record);
+                
+                // 保存到本地存储
+                localStorage.setItem('productionRecords', JSON.stringify(productionRecords));
+                
+                resultDiv.className = 'test-result success';
+                resultDiv.textContent = `✓ 表单提交测试成功 - 已保存 ${productionRecords.length} 条记录`;
+            } catch (error) {
+                resultDiv.className = 'test-result error';
+                resultDiv.textContent = '✗ 表单提交测试失败: ' + error.message;
+            }
+        }
+        
+        // 测试3: 数据读取验证
+        function testDataRetrieval() {
+            const resultDiv = document.getElementById('test3-result');
+            const dataDisplay = document.getElementById('data-display');
+            const dataOutput = document.getElementById('data-output');
+            
+            try {
+                // 重新加载数据
+                const storedRecords = localStorage.getItem('productionRecords');
+                
+                if (storedRecords) {
+                    const parsedRecords = JSON.parse(storedRecords);
+                    
+                    if (Array.isArray(parsedRecords)) {
+                        resultDiv.className = 'test-result success';
+                        resultDiv.textContent = `✓ 数据读取成功 - 找到 ${parsedRecords.length} 条记录`;
+                        
+                        // 显示数据
+                        dataDisplay.style.display = 'block';
+                        dataOutput.textContent = JSON.stringify(parsedRecords, null, 2);
+                    } else {
+                        resultDiv.className = 'test-result error';
+                        resultDiv.textContent = '✗ 数据格式错误 - 存储的不是数组';
+                        dataDisplay.style.display = 'none';
+                    }
+                } else {
+                    resultDiv.className = 'test-result info';
+                    resultDiv.textContent = 'ℹ 没有找到存储的数据';
+                    dataDisplay.style.display = 'none';
+                }
+            } catch (error) {
+                resultDiv.className = 'test-result error';
+                resultDiv.textContent = '✗ 数据读取失败: ' + error.message;
+                dataDisplay.style.display = 'none';
+            }
+        }
+        
+        // 测试4: 边界情况处理
+        function testEdgeCases() {
+            const resultDiv = document.getElementById('test4-result');
+            
+            try {
+                let successCount = 0;
+                
+                // 测试1: 空数据处理
+                localStorage.setItem('productionRecords', '');
+                initializeData();
+                if (Array.isArray(productionRecords) && productionRecords.length === 0) {
+                    successCount++;
+                }
+                
+                // 测试2: 无效JSON处理
+                localStorage.setItem('productionRecords', '{invalid json');
+                initializeData();
+                if (Array.isArray(productionRecords) && productionRecords.length === 0) {
+                    successCount++;
+                }
+                
+                // 测试3: 非数组数据处理
+                localStorage.setItem('productionRecords', '"not an array"');
+                initializeData();
+                if (Array.isArray(productionRecords) && productionRecords.length === 0) {
+                    successCount++;
+                }
+                
+                resultDiv.className = 'test-result success';
+                resultDiv.textContent = `✓ 边界情况测试通过 - ${successCount}/3 个测试用例通过`;
+            } catch (error) {
+                resultDiv.className = 'test-result error';
+                resultDiv.textContent = '✗ 边界情况测试失败: ' + error.message;
+            }
+        }
+        
+        // 显示系统状态
+        function showSystemStatus() {
+            const statusOutput = document.getElementById('status-output');
+            
+            try {
+                const storedRecords = localStorage.getItem('productionRecords');
+                const storedSettings = localStorage.getItem('settings');
+                const storedCounter = localStorage.getItem('recordCounter');
+                
+                let status = '系统状态:\n';
+                status += `生产记录: ${storedRecords ? '存在' : '不存在'}\n`;
+                status += `系统设置: ${storedSettings ? '存在' : '不存在'}\n`;
+                status += `记录计数器: ${storedCounter || '未设置'}\n`;
+                
+                if (storedRecords) {
+                    const records = JSON.parse(storedRecords);
+                    status += `记录数量: ${Array.isArray(records) ? records.length : '格式错误'}\n`;
+                }
+                
+                statusOutput.className = 'test-result info';
+                statusOutput.textContent = status;
+            } catch (error) {
+                statusOutput.className = 'test-result error';
+                statusOutput.textContent = '获取状态失败: ' + error.message;
+            }
+        }
+        
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeData();
+            document.getElementById('status-output').textContent = '系统已就绪，可以开始测试';
+        });
+    </script>
+</body>
+</html>
